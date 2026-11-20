@@ -1,0 +1,231 @@
+# FRNC — 프랜차이즈 창업 전 10초 리스크 체크
+
+> **Franchise, simplified.** · KOREA FRANCHISE DISCLOSURE RISK CHECK
+
+프랜차이즈 창업 전에 본부가 제시한 조건(정보공개서 수령 후 경과일, 가맹금 납부 방식,
+예상매출 서면, 인테리어 지정, 영업지역, 폐점률, 법 위반 이력 등)을 **가맹사업법·시행령
+조문과 대조**해 위험 신호·확인 체크리스트·질문·근거 조문을 돌려주는 웹·JSON API·MCP
+서비스입니다. 표준 라이브러리만 쓰고, 로그인·회원가입·개인정보 입력이 없습니다.
+
+**확정 판정이 아닙니다.** 결과는 `check_likely`(확인 필요 신호 있음) / `info_needed`(정보 부족) /
+`low_risk`(뚜렷한 위험 신호 없음) 세 가지뿐이고, 모든 응답에 면책과 근거 조문이 붙습니다.
+
+---
+
+## 1. 무엇을 보나 (핵심 8축)
+
+| 축 | 보는 것 | 근거 |
+|---|---|---|
+| 숙고기간 | 정보공개서·계약서를 받은 뒤 14일(자문 시 7일) 전 계약·입금 | 가맹사업법 제7조③, 제11조① |
+| 가맹금 | 예치기관 예치 또는 피해보상보험계약 | 제6조의5①, 시행령 제5조의8 |
+| 매출 정보 | 예상매출액 산정서·산출근거 서면 교부 | 제9조③⑤ |
+| 인테리어 | 본사 지정 100% 강제(구입강제) | 제12조①3, 시행령 별표 2 3.가 |
+| 영업지역 | 계약서 기재·계약 중 침해 금지 | 제12조의4, 제11조②5 |
+| 폐점률 | 최근 3년 가맹점 변동(신규·계약종료·계약해지) | 제9조①2 |
+| 법 위반 이력 | 공정위 시정조치·과징금·형벌선고 | 제9조①2 |
+| 해지·갱신 | 2개월 유예·서면 2회 통지, 갱신 10년 한도 | 제14조, 제13조 |
+
+함정 코퍼스 **15건**(`src/franchise_kr/traps.json`)이 위 축과 그 밖의 조항(위약금, 필수품목·
+판매목표, 가격 구속, 광고·판촉비, 정보공개서 등록)을 덮습니다. 각 케이스의 `law_refs` 는
+실조회한 조문 키와 1:1로 대조되며, 테스트가 그 대응을 강제합니다.
+
+## 2. 검증한 것 (추측 금지)
+
+### 2-1. 법령 — 법제처 OPEN API 실조회
+`law-verification.json` 은 `src/tools/verify_law_articles.py` 가 법제처 국가법령정보
+공동활용 OPEN API(`law.go.kr/DRF`)로 받은 응답입니다. 조문 텍스트를 손으로 옮겨 적지
+않았고, `조문내용`·`항`·`호`·`목` 구조를 그대로 보존했습니다.
+
+| 법령 | MST | 공포 | 시행 | 조문 |
+|---|---|---|---|---|
+| 가맹사업거래의 공정화에 관한 법률 | 288583 | 2026-08-04 | 2026-10-02 | 77 |
+| 가맹사업법 시행령 | 288453 | 2026-08-04 | 2026-08-04 | 64 |
+
+- 조문 **135개**, 별표 **17개**(불공정거래행위 유형·기준 별표 2 포함) 저장.
+- `get_law_article` 툴(`POST /v1/tools/get_law_article`)로 원문을 그대로 조회합니다.
+- OC 인증값은 파일·응답·로그에 남기지 않습니다.
+
+### 2-2. 공정거래위원회 가맹정보 오픈API — 실호출 결과
+
+`src/tools/verify_ftc_apis.py` 가 후보 오퍼레이션을 **실제로 호출**해 응답 코드를 기록합니다.
+`NO_OPENAPI_SERVICE_ERROR`(12)는 오퍼레이션 이름이 틀렸다는 뜻이고,
+`SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)은 이름은 맞지만 이 인증키가 해당 서비스에
+등록되지 않았다는 뜻입니다. 2026-11-21 실측(`api-verification-2026-11-21.json`):
+
+- 호출 시도 **18개** → 키 미등록(30) **17개**, 오퍼레이션 미확인(12) **1개**, 승인 **0개**
+- 문서 열람형(LINK) **3개**(정보공개서 목록·목차·본문)는 REST 오퍼레이션이 공개되어 있지 않음
+
+| 데이터셋 | 식별자 | 오퍼레이션 | 상태 |
+|---|---|---|---|
+| 브랜드 목록 | 15125467 | `getBrandinfo` | 키 미등록 |
+| 가맹본부 일반 정보 | 15125450 | `getjnghdqrtrsGnlinfo2` | 키 미등록 |
+| 브랜드별 가맹점 현황(평균매출) | 15110241 | `getBrandFrcsStats` | 키 미등록 |
+| 브랜드 가맹점 및 직영점 | 15125490 | `getbrandFrcsDmsstus2` | 키 미등록 |
+| 브랜드 가맹점 변경현황 | 15125491 | `getbrandFrcsFlctnstus` | 키 미등록 |
+| 브랜드별 창업 금액 | 15110265 | `getBrandFntnStats` | 키 미등록 |
+| 인테리어 비용 | 15125479 | `getbrandFrcsBzmnIntrrctinfo` | 키 미등록 |
+| 가맹금 정보 | 15125476 | `getbrandFrcsJnntinfo` | 키 미등록 |
+| 부담금 정보 | 15125475 | `getbrandFrcsbzmnAlotminfo` | 키 미등록 |
+| 예치금 정보 | 15125480 | `getbrandFrcsBzmnDepoinfo` | 키 미등록 |
+| 가맹본부 법 위반정보 | 15125463 | `getjnghdqrtrsLawVioltinfo` | 키 미등록 |
+| 법 위반 시정조치 | 15125464 | `getjnghdqrtrsCorecActninfo` | 키 미등록 |
+| 법 위반 형벌선고 | 15125466 | `getjnghdqrtrsPetyAdjuinfo` | 키 미등록 |
+| 브랜드 지식재산권 | 15125471 | `getbrandIprsinfo` | 키 미등록 |
+| 가맹기간 | 15125484 | `getbrandFrcsPdinfo` | 키 미등록 |
+| 브랜드 비교 목록 | 15125517 | `getbrandCompListinfo` | 키 미등록 |
+| 가맹본부 일반 변경 이력 | 15125452 | `getjnghdqrtrsGnlHist` | 키 미등록 |
+| 단위면적당 평균매출 | 15125494 | (오퍼레이션 미확인) | 미확인 |
+| 정보공개서 목록·목차·본문 | 15125569·15125570·15125571 | LINK | 문서 열람 |
+
+**활용신청이 필요한 주소**는 각 `https://www.data.go.kr/data/{식별자}/openapi.do` 입니다.
+서버는 신청 상태를 하드코딩하지 않고, 응답의 `apply_urls` 와 `/v1/meta` 의
+`data_sources.apply_urls` 로 알려 줍니다. 승인 전에는 브랜드 조회가 **내장 샘플**
+(`data_state: "sample"`)로 동작하고, **판정 자체는 법령 조문만으로 그대로 계산**됩니다.
+
+## 3. 빠른 실행
+
+```bash
+cd projects/franchise-kr
+PYTHONPATH=src python -m franchise_kr.server          # http://localhost:8787
+PYTHONPATH=src python -m franchise_kr.cli check --brand 샘플치킨 --days 0 --payment hq_account
+PYTHONPATH=src python -m franchise_kr.cli law "제7조"
+PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 269 tests
+```
+
+의존성 설치 단계가 없습니다(표준 라이브러리만). Python 3.12 기준.
+
+### 환경변수
+`.env.example` 참고. `DATA_GO_KR_SERVICE_KEY` 는 선택이며, 없으면 샘플로 동작합니다.
+`LAW_GO_KR_OC` 는 `law-verification.json` 을 다시 만들 때만 씁니다(서버는 쓰지 않음).
+
+### 검증 자료 재생성
+```bash
+LAW_GO_KR_OC=<OC> PYTHONPATH=src python -m tools.verify_law_articles     # → law-verification.json
+DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # → api-verification-YYYY-MM-DD.json
+```
+
+## 3-1. 질문형 가이드 15종 (`/guides/`) — AI 인용·검색 유입
+
+사람들이 AI·검색에 던지는 질문 하나에 답 하나를 두고, 인용되는 형식으로 만든 페이지입니다.
+
+| # | 가이드 | 질문 | 근거 조문 |
+|---|---|---|---|
+| 1 | 가맹계약 14일 숙고기간 | 정보공개서를 받은 지 14일이 안 됐는데 계약해도 되나요? | 제7조·제11조·시행령 제6조 |
+| 2 | 예상매출액 산정서 서면 교부 | 예상매출액 산정서는 꼭 받아야 하나요? | 제9조·시행령 제9조·제8조 |
+| 3 | 정보공개서 허위·과장 금지 | "최저 수익 보장"이라고 하면 믿어도 되나요? | 제9조·시행령 제8조·제6조의2 |
+| 4 | 직영점 1년 이상 운영 의무 | 직영점을 1년 이상 운영해야 하나요? | 제6조의3·시행령 제5조의5·제5조 |
+| 5 | 가맹금 예치제 의무 | 가맹금을 본사 계좌로 바로 보내도 되나요? | 제6조의5·시행령 제5조의8~10·제15조의2 |
+| 6 | 인테리어·집기 구입강제 금지 | 지정 업체만 써야 하나요? | 제12조·시행령 별표 2·제11조·제12조의2 |
+| 7 | 과중 위약금·손해배상 | 중도해지 위약금이 크면 과중한가요? | 제12조·시행령 제12조의2·별표 2 |
+| 8 | 광고·판촉비 사전 동의 | 광고비를 걷는데 점주 동의가 필요하나요? | 제12조의6·시행령 제13조의5·제13조의6 |
+| 9 | 창업 지원금 확인 순서 | 창업비용을 낸 뒤 지원금은 어떻게 찾나요? | (법령 판단 없음 · GRNT 연결) |
+| 10 | 영업지역 보호·중복 출점 | 영업지역 안에 본사가 직영점을 내면? | 제12조의4·제11조·시행령 제13조의4 |
+| 11 | 폐점률·개점률 보는 법 | 정보공개서의 폐점률은 어떻게 읽나요? | 시행령 별표 1·제9조 |
+| 12 | 2개월 유예·서면 2회 해지 | 갑자기 해지하겠다고 하면? | 제14조·시행령 제15조 |
+| 13 | 계약갱신·10년 한도 | 계약이 끝나갈 때 갱신을 요구할 수 있나요? | 제13조·시행령 제14조 |
+| 14 | 가맹점주 단체의 협의 요청 | 단체를 만들어 조건을 협의할 수 있나요? | 제14조의2·제14조의3 |
+| 15 | 분쟁조정 신청과 시효 | 다툼이 생기면 어디에 신청하나요? | 제16조·제21조·제22조·제28조·제32조의3 |
+
+- 페이지의 **모든 숫자(14일·7일·2개월·40%·50%·70%·180일·1.7배·3.3㎡ 등)는 그 가이드가 인용한
+  조문 안에 실제로 있는지 테스트가 확인**합니다(`src/tests/test_guides.py`).
+  `40%` 는 조문의 `100분의 40` 표기와 대조합니다.
+- `/sitemap.xml`(17 URL) · `/llms.txt`(가이드 15종 요약) · 홈 푸터·홈 카드·`/v1/meta` 의 `guides`
+  메타가 모두 같은 목록에서 생성됩니다.
+- 단정 표현 금지: "위법입니다 / 문제없습니다 / 안전합니다 / 무조건" 같은 확정 어구 0건을
+  `src/tests/test_no_definitive_claims.py` 가 검사하고, "확정 판정 아님" 문구가 남아 있는지도 봅니다.
+
+### 색 대비·스크립트 검증
+
+- `src/tests/test_a11y_contrast.py` — 라이트/다크 토큰 24쌍의 WCAG 대비를 **계산**해 4.5:1 이상인지
+  확인합니다(현재 최저 4.73:1). 토큰만 있고 조합이 어긋나는 경우를 잡습니다.
+- `src/tests/test_js_sanity.py` — esprima 없이 문자열·주석·정규식 리터럴을 걷어낸 코드로 괄호 균형,
+  템플릿 문자열 금지, `function` 형식, id 참조 존재를 검사합니다.
+
+## 4. API · MCP
+
+### 툴 6종
+
+| 툴 | 하는 일 |
+|---|---|
+| `check_franchise_risk` | 조건 → 위험 신호·판정·질문·체크리스트·법 조문·GRNT 연결 |
+| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(실시간 또는 샘플 + 신청 주소) |
+| `compare_franchise_terms` | 두 프랜차이즈 조건 비교(비용·절차·위험 신호) |
+| `list_risk_cases` | 함정 코퍼스 15건(위험도·분류·키워드 필터, 조문 대조 여부) |
+| `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
+| `get_service_meta` | 판정 등급·8축·법령·API 승인 상태·개인정보 설계 |
+
+### REST
+
+```bash
+curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: application/json' -d '{
+  "brand_name": "샘플치킨", "industry": "치킨",
+  "franchise_fee_krw": "1,100만원", "interior_krw": "5,500만원",
+  "disclosure_days_before": 0, "payment_route": "hq_account",
+  "revenue_claim_ko": "월 5천 보장", "revenue_written": false
+}'
+```
+
+응답에는 `verdict`, `risk_score`, `risk_points`(이유·되돌리기 어려운 점·할 일·물어볼 것·조문),
+`unknown_points`, `questions_ko`, `checklist_ko`, `money`, `law_basis`, `next_steps`,
+`startup_support`(GRNT 링크), `disclaimer_ko` 가 들어 있습니다.
+
+- `GET /healthz` · `/v1/meta` · `/v1/stats` · `/v1/mcp` · `/llms.txt` · `/sitemap.xml`
+- `POST /v1/tools/{tool}` · `POST /v1/inquiry`(문의)
+- 웹 UI `GET /` — 원클릭 프리셋 4개(당일 계약·본사 송금 / 구두 매출 보장 / 인테리어 100% 강제 /
+  정상 조건), 결과 요약 복사, 비식별 공유 링크 복사(`/?brand=...#check` 프리필), 다크 모드,
+  모바일 반응형. 공유 링크에는 **브랜드명만** 담고 금액·조건·연락처는 담지 않습니다.
+- 질문형 가이드 `GET /guides/` · `GET /guides/{slug}` — 15종. 각 페이지는 한 줄 답, 법이 정한
+  기준, 계약 전 체크포인트, 흔한 오해, FAQ, 근거 조문 원문을 담고 `FAQPage`·`BreadcrumbList`·
+  `WebPage` JSON-LD 를 포함합니다. `/guides` 는 `/guides/` 로 301.
+
+### MCP
+
+- Streamable HTTP: `POST /mcp` (JSON-RPC 2.0, `application/json` 한 덩어리, SSE 없음)
+- stdio: `PYTHONPATH=src python -m franchise_kr.mcp_stdio`
+- 서버 카드: `GET /.well-known/mcp/server-card.json`
+- 인증 없음. `initialize` → `tools/list` → `tools/call`.
+
+## 5. 개인정보·익명성
+
+- 판정 폼은 **이름·연락처·주민등록번호를 받지 않습니다.** 브랜드명·금액·조건은 요청 처리
+  중에만 쓰고 저장하지 않습니다.
+- 익명 카운터는 `날짜 · 경로 · 툴 · 판정 등급 · 샘플/0건/오류 횟수`만 남깁니다.
+  금액·조건 입력은 통계에도 저장하지 않습니다.
+- 예외 하나: **결과가 0건으로 끝난 브랜드 조회어만** 개인식별 요소(전화번호·주민등록번호·
+  이메일·URL·@핸들·2자리 이상 숫자)를 지운 뒤 최대 30자로 `/v1/stats` 의
+  `zero_result_queries` 에 익명 카운트합니다(`usage.sanitize_query`). 0건은 "그 브랜드가
+  없다"도 "안전하다"도 아니며, 응답에는 고정 안내(`live_api.ZERO_RESULT_NOTICE_KO`)가 붙습니다.
+- 유일한 예외는 하단 문의 카드에 이용자가 직접 적은 연락처로, 회신 목적으로만 별도 표에
+  두고 응답에 되비추지 않으며 180일 뒤 지웁니다.
+- 저장소에는 실명·연락처·직업·계정 같은 개인정보를 두지 않습니다. `src/tests/test_privacy.py`
+  가 휴대전화·주민등록번호·이메일·카드번호·인증키 패턴을 검사하고, 로컬 전용
+  `.private-terms`(gitignore·dockerignore 대상)가 있으면 그 문자열까지 확인합니다.
+
+## 6. 배포
+
+- `Dockerfile`: `python:3.12-slim`, 비루트 사용자, `HEALTHCHECK /healthz`, 표준 라이브러리만
+- `render.yaml`: Render Blueprint(도커, free, singapore, `/healthz`), `DATA_GO_KR_SERVICE_KEY`
+  는 `sync: false`(대시보드에서 입력)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.1)
+
+## 7. 한계 (정직하게)
+
+1. **확정 판정이 아니다.** 입력한 조건과 공개 조문의 대조일 뿐, 위법 여부·계약 효력을
+   판단하지 않습니다. 계약서 검토·법률 자문·신고 대행을 하지 않습니다.
+2. 브랜드 실데이터는 공정위 가맹정보 API 활용신청이 승인되어야 합니다. 2026-11-21 현재
+   이 키는 가맹정보 API 18개 중 승인 0개이며, 그래서 화면과 응답의 `data_state` 는
+   `sample` 입니다. 승인 후 첫 호출에서 응답 봉투가 문서와 다르면 `unexpected_shape` 로
+   남기고 **0건으로 단정하지 않습니다**.
+3. 정보공개서 목록·목차·본문(15125569·15125570·15125571)은 data.go.kr 제공형태가 LINK라
+   REST 로 부를 수 없습니다. 본문은 가맹사업정보제공시스템에서 열람해야 합니다.
+4. 단위면적당 평균매출(15125494)은 오퍼레이션 이름을 확인하지 못해 `unverified` 로 남겼습니다.
+5. 폐점률은 3년 변동 자료가 있을 때 계산하며, 자료가 없으면 '모름'으로 두고 질문합니다.
+
+## 8. 출처
+
+- 법령: 법제처 국가법령정보 공동활용 OPEN API (`law.go.kr/DRF`)
+- 가맹정보: 공정거래위원회 가맹정보 오픈API (`apis.data.go.kr/1130000`, data.go.kr)
+- 정보공개서 원문: 가맹사업정보제공시스템 (`franchise.ftc.go.kr`)
+- 창업 지원금: GRNT (`https://grnt-kr.onrender.com/`)
+
+MIT License.
