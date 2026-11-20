@@ -44,7 +44,17 @@ jobs:
               data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).encode(),
               headers={"Content-Type": "application/json"}, method="POST")
           with urllib.request.urlopen(request, timeout=5) as response:
-              assert len(json.loads(response.read())["result"]["tools"]) == 6
+              assert len(json.loads(response.read())["result"]["tools"]) == 7
+          scan = urllib.request.Request(
+              "http://127.0.0.1:8787/v1/tools/scan_contract_text",
+              data=json.dumps({"text": "가맹금과 보증금은 당사 계좌로 직접 입금한다."}).encode(),
+              headers={"Content-Type": "application/json"}, method="POST")
+          with urllib.request.urlopen(scan, timeout=5) as response:
+              body = json.loads(response.read())
+          assert body["ok"] is True
+          assert body["result"]["verdict"]["code"] == "scan_flagged", body["result"]["verdict"]
+          assert body["result"]["not_a_clearance_ko"], "0건 안내 문장 누락"
+          assert "가맹금 본사 직접 수령" in json.dumps(body, ensure_ascii=False)
           status, body = get("/guides/")
           assert status == 200
           status, body = get("/guides/cooling-off-14days")

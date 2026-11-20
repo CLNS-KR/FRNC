@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.dirname(HERE))
 from franchise_kr import api, engine, models  # noqa: E402
 
 EXPECTED_TOOLS = {
-    "check_franchise_risk", "lookup_brand_disclosure", "compare_franchise_terms",
-    "list_risk_cases", "get_law_article", "get_service_meta",
+    "check_franchise_risk", "scan_contract_text", "lookup_brand_disclosure",
+    "compare_franchise_terms", "list_risk_cases", "get_law_article", "get_service_meta",
 }
 
 SAMPLE = {
@@ -29,7 +29,7 @@ class ToolRegistryTest(unittest.TestCase):
     def test_expected_tools_exist(self):
         names = {definition["name"] for definition in api.TOOL_DEFS}
         self.assertEqual(names, EXPECTED_TOOLS)
-        self.assertEqual(len(api.mcp_tools()), 6)
+        self.assertEqual(len(api.mcp_tools()), 7)
 
     def test_every_tool_has_schema_and_description(self):
         for tool in api.mcp_tools():
@@ -40,7 +40,7 @@ class ToolRegistryTest(unittest.TestCase):
     def test_manifest_shape(self):
         manifest = api.mcp_manifest()
         self.assertEqual(manifest["name"], "frnc")
-        self.assertEqual(len(manifest["tools"]), 6)
+        self.assertEqual(len(manifest["tools"]), 7)
         self.assertTrue(manifest["version"].startswith("frnc/"))
 
     def test_check_tool_envelope(self):

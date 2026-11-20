@@ -76,6 +76,8 @@ def llms_txt(base: Optional[str] = None) -> str:
 ## 사람용
 - [내 조건으로 10초 체크]({root}/): 로그인·회원가입·개인정보 입력 없이 브랜드·금액·조건만 고릅니다.
   원클릭 프리셋 4개(당일 계약·본사 계좌 송금 / 구두 매출 보장 / 인테리어 100% 강제 / 정상 조건).
+- [계약서·특약 문구 스캔]({root}/): 본부가 보낸 특약 문구를 붙여넣으면 확인이 필요한 문구와
+  본부에 요청할 수정 문구를 짚어 줍니다. 샘플 3종(구입강제·과중 위약금·즉시 해지) 버튼.
 - [질문형 가이드 15종]({root}/guides/): 정보공개서 14일 숙고기간, 예상매출액 산정서, 가맹금 예치,
   인테리어 강제, 영업지역, 폐점률, 위약금, 해지·갱신, 점주 단체, 분쟁조정을 조문과 함께 정리.
 - [서비스·데이터 상태]({root}/v1/meta): 판정 등급, 핵심 8개 축, 법령 실조회 상태, 공정위 API 승인 상태,
@@ -93,6 +95,8 @@ def llms_txt(base: Optional[str] = None) -> str:
 ## 기계용 (REST JSON)
 - [리스크 체크]({root}/v1/tools/check_franchise_risk): POST.
   `{{"brand_name": "샘플치킨", "industry": "치킨", "franchise_fee_krw": "1100만원", "interior_krw": "5500만원", "disclosure_days_before": 0, "payment_route": "hq_account", "revenue_claim_ko": "월 5천 보장", "revenue_written": false}}`
+- [계약서·특약 문구 스캔]({root}/v1/tools/scan_contract_text): POST. `{{"text": "인테리어는 당사가 지정한 업체를 통해서만 시공한다"}}`
+  — 확인이 필요한 문구·원문 인용·근거 조문·수정 요청 문구. 0건이어도 '안전'을 뜻하지 않습니다.
 - [브랜드 정보공개서 요약]({root}/v1/tools/lookup_brand_disclosure): POST. `{{"brand_name": "샘플치킨"}}`
 - [두 조건 비교]({root}/v1/tools/compare_franchise_terms): POST. `{{"a": {{...}}, "b": {{...}}}}`
 - [리스크 케이스 목록]({root}/v1/tools/list_risk_cases): POST. `{{"severity": "high"}}`

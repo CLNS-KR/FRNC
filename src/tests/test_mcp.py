@@ -35,7 +35,7 @@ class ProtocolTest(unittest.TestCase):
     def test_tools_list(self):
         out = mcp.handle(rpc("tools/list"))
         names = [tool["name"] for tool in out["result"]["tools"]]
-        self.assertEqual(len(names), 6)
+        self.assertEqual(len(names), 7)
         self.assertIn("check_franchise_risk", names)
 
     def test_tools_call_returns_text_and_structured(self):

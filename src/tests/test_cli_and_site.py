@@ -95,7 +95,7 @@ class StaticFilesTest(unittest.TestCase):
 
     def test_server_card_tools_and_transports(self):
         card = static_files.server_card()
-        self.assertEqual(len(card["tools"]), 6)
+        self.assertEqual(len(card["tools"]), 7)
         self.assertFalse(card["authentication"]["required"])
         self.assertEqual(card["transport"]["type"], "streamable-http")
         self.assertEqual(card["transports"]["stdio"]["args"][-1], "franchise_kr.mcp_stdio")
@@ -110,10 +110,10 @@ class StaticFilesTest(unittest.TestCase):
         llms = static_files.llms_txt()
         self.assertIn("## 질문형 가이드", llms)
         sitemap = static_files.sitemap_xml()
-        self.assertIn("https://frnc-kr.onrender.com/guides/", sitemap)
+        self.assertIn("https://frnc.onrender.com/guides/", sitemap)
         for guide in guides.GUIDES:
-            self.assertIn(f"https://frnc-kr.onrender.com/guides/{guide['slug']}", llms)
-            self.assertIn(f"<loc>https://frnc-kr.onrender.com/guides/{guide['slug']}</loc>", sitemap)
+            self.assertIn(f"https://frnc.onrender.com/guides/{guide['slug']}", llms)
+            self.assertIn(f"<loc>https://frnc.onrender.com/guides/{guide['slug']}</loc>", sitemap)
 
 
 if __name__ == "__main__":

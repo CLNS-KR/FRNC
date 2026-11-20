@@ -1,8 +1,9 @@
-"""MCP/JSON API 툴 6종.
+"""MCP/JSON API 툴 7종.
 
 | 툴 | 하는 일 |
 |---|---|
 | `check_franchise_risk` | 가맹 조건 → 위험 신호·판정·체크리스트·법 조문·지원금 연결 |
+| `scan_contract_text` | 계약서·특약 문구 → 확인이 필요한 문구·근거 조문·수정 요청 문구 |
 | `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(공정위 API 실시간 또는 내장 샘플) |
 | `compare_franchise_terms` | 두 프랜차이즈(또는 두 제안 조건) 비교 |
 | `list_risk_cases` | 함정 코퍼스 15건 목록(조문 대조 여부 포함) |
@@ -13,7 +14,9 @@
 ---------
 - 모든 응답에 `checked_at`, `schema_version`, `disclaimer_ko` 가 붙습니다.
 - 판정은 세 가지(`check_likely`/`info_needed`/`low_risk`)이고 확정 판정이 아닙니다.
-- 입력값(브랜드·금액)은 응답의 `terms_used` 에만 되비추고 **서버에 저장하지 않습니다**.
+  문구 스캔은 따로 세 가지(`scan_flagged`/`scan_no_match`/`scan_text_needed`)를 쓰고,
+  0건이어도 '안전·문제없음'을 쓰지 않습니다.
+- 입력값(브랜드·금액·계약서 문구)은 응답의 `terms_used`/`findings` 에만 되비추고 **서버에 저장하지 않습니다**.
   예외는 결과가 0건인 브랜드 조회어뿐이며, 개인식별 요소를 지운 뒤 익명 횟수로만 남깁니다
   (`usage.sanitize_query`, 0건은 '문제없음·안전'이 아닙니다).
 """
@@ -113,7 +116,16 @@ def tool_check_franchise_risk(args: Dict[str, Any], store: Any = None) -> Dict[s
 
 
 # ---------------------------------------------------------------------------
-# 툴 2 — lookup_brand_disclosure
+# 툴 2 — scan_contract_text
+# ---------------------------------------------------------------------------
+def tool_scan_contract_text(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
+    result = engine.scan_contract_text(args)
+    result["meta"] = _meta_block()
+    return _envelope("scan_contract_text", result)
+
+
+# ---------------------------------------------------------------------------
+# 툴 3 — lookup_brand_disclosure
 # ---------------------------------------------------------------------------
 def tool_lookup_brand_disclosure(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
     brand = str(args.get("brand_name") or args.get("brand") or args.get("query") or "").strip()
@@ -149,7 +161,7 @@ def _lookup_questions(result: Dict[str, Any]) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# 툴 3 — compare_franchise_terms
+# 툴 4 — compare_franchise_terms
 # ---------------------------------------------------------------------------
 def tool_compare_franchise_terms(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
     result = engine.compare_franchise_terms(args)
@@ -158,7 +170,7 @@ def tool_compare_franchise_terms(args: Dict[str, Any], store: Any = None) -> Dic
 
 
 # ---------------------------------------------------------------------------
-# 툴 4 — list_risk_cases
+# 툴 5 — list_risk_cases
 # ---------------------------------------------------------------------------
 def tool_list_risk_cases(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
     result = engine.list_risk_cases()
@@ -187,7 +199,7 @@ def tool_list_risk_cases(args: Dict[str, Any], store: Any = None) -> Dict[str, A
 
 
 # ---------------------------------------------------------------------------
-# 툴 5 — get_law_article
+# 툴 6 — get_law_article
 # ---------------------------------------------------------------------------
 def tool_get_law_article(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
     result = engine.search_law_article(args.get("article") or args.get("query") or "")
@@ -211,7 +223,7 @@ def tool_get_law_article(args: Dict[str, Any], store: Any = None) -> Dict[str, A
 
 
 # ---------------------------------------------------------------------------
-# 툴 6 — get_service_meta
+# 툴 7 — get_service_meta
 # ---------------------------------------------------------------------------
 def tool_get_service_meta(args: Dict[str, Any], store: Any = None) -> Dict[str, Any]:
     meta = _meta_block()
@@ -239,6 +251,22 @@ def tool_get_service_meta(args: Dict[str, Any], store: Any = None) -> Dict[str, 
             },
         },
         "trap_cases": len(engine.trap_cases()),
+        "contract_scan": {
+            "tool": "scan_contract_text",
+            "rule_count": len(engine.CONTRACT_RULES),
+            "max_chars": engine.SCAN_MAX_CHARS,
+            "verdicts": [
+                {"code": code, "label_ko": models.SCAN_VERDICT_LABELS_KO[code]}
+                for code in models.SCAN_VERDICT_ORDER
+            ],
+            "rules": [
+                {"rule_id": rule["id"], "title_ko": rule["title_ko"],
+                 "category": rule["category"], "severity": rule["severity"],
+                 "law_refs": rule["law_refs"]}
+                for rule in engine.CONTRACT_RULES
+            ],
+            "not_a_clearance_ko": engine.SCAN_NOT_A_CLEARANCE_KO,
+        },
         "law": engine.law_meta(),
         "data_sources": live_api.dataset_summary(),
         "guides": meta["guides"],
@@ -341,6 +369,34 @@ TOOL_DEFS: List[Dict[str, Any]] = [
                 "avg_sales_krw": {"type": ["integer", "string"], "description": "가맹점 평균매출액"},
             },
             "required": [],
+        },
+    },
+    {
+        "name": "scan_contract_text",
+        "title_ko": "계약서·특약 문구 스캔",
+        "description_ko": (
+            "가맹계약서·특약·본부 안내 문구를 텍스트로 받아, 가맹사업법·시행령 별표 2의 "
+            "불공정 유형(구입강제·지정업체 강제, 과중 위약금, 최고 없는 즉시 해지, 영업지역 침해, "
+            "숙고기간 포기, 가맹금 본사 직접 수령, 광고·판촉비 일방 부담, 매출 보장, 영업시간 구속, "
+            "과도한 경업금지·갱신 거절)과 대조해 **확인이 필요한 문구만** 짚어 줍니다. "
+            "각 항목에 매칭된 원문 인용, 위험 등급, 실조회 법 조문, 왜 위험한지, 본부에 요청할 "
+            "수정 문구 예시가 붙습니다. 결론은 `scan_flagged`(확인 필요 문구 있음) / "
+            "`scan_no_match`(제시된 패턴에서 잡힌 문구 없음) / `scan_text_needed`(문구 부족) 세 "
+            "가지이며, 0건이어도 '안전·문제없음'을 뜻하지 않습니다(`not_a_clearance_ko` 고정 "
+            "문장을 항상 돌려줍니다). 문맥·예외 조항 해석이나 위법 판정·계약서 검토를 하지 않습니다."
+        ),
+        "handler": tool_scan_contract_text,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "계약서·특약·본사 안내 문구 전문 또는 확인할 조항(최대 20,000자).",
+                },
+                "contract_text": {"type": "string", "description": "text 의 다른 이름(계약서 본문)"},
+                "clause_text": {"type": "string", "description": "text 의 다른 이름(조항 한두 개만 넣을 때)"},
+            },
+            "required": ["text"],
         },
     },
     {
@@ -538,6 +594,20 @@ def text_summary(result: Dict[str, Any]) -> str:
         support = data.get("startup_support") or {}
         if support.get("url"):
             lines.append(f"창업 지원금 확인: {support['url']}")
+        return "\n".join(line for line in lines if line)
+    if tool == "scan_contract_text":
+        verdict = data.get("verdict") or {}
+        counts = data.get("counts") or {}
+        lines = [f"[{verdict.get('label_ko')}] 확인 필요 문구 {counts.get('flagged', 0)}건 "
+                 f"(높음 {counts.get('high', 0)} · 주의 {counts.get('medium', 0)}) · "
+                 f"대조한 유형 {counts.get('rules_checked', 0)}개",
+                 str(data.get("summary_ko") or "")]
+        for row in (data.get("findings") or [])[:4]:
+            lines.append(f"· [{row['severity_label_ko']}] {row['title_ko']} — {row['matched_text_ko']}")
+        for row in (data.get("request_edits_ko") or [])[:2]:
+            lines.append(f"요청 문구({row['title_ko']}): {row['request_ko']}")
+        if data.get("not_a_clearance_ko"):
+            lines.append(str(data["not_a_clearance_ko"]))
         return "\n".join(line for line in lines if line)
     if tool == "lookup_brand_disclosure":
         status = data.get("status")

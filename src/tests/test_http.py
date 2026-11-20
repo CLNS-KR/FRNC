@@ -89,7 +89,7 @@ class HttpTest(unittest.TestCase):
         self.assertIn("check_franchise_risk", llms)
         self.assertIn("확정 판정이 아니", llms)
         _, card, _ = self.get("/.well-known/mcp/server-card.json")
-        self.assertEqual(len(json.loads(card)["tools"]), 6)
+        self.assertEqual(len(json.loads(card)["tools"]), 7)
 
     def test_guides_index_and_pages(self):
         status, body, headers = self.get("/guides/")
@@ -126,7 +126,7 @@ class HttpTest(unittest.TestCase):
 
     def test_manifest_and_meta(self):
         _, body, _ = self.get("/v1/mcp")
-        self.assertEqual(len(json.loads(body)["tools"]), 6)
+        self.assertEqual(len(json.loads(body)["tools"]), 7)
         _, body, _ = self.get("/v1/meta")
         meta = json.loads(body)["result"]
         self.assertEqual(len(meta["verdicts"]), 3)
@@ -155,6 +155,31 @@ class HttpTest(unittest.TestCase):
         status, body = self.post("/v1/tools/compare_franchise_terms", {"a": {}})
         self.assertEqual(status, 400)
         self.assertEqual(body["error"], "invalid_argument")
+
+    def test_scan_contract_text_tool(self):
+        status, body = self.post("/v1/tools/scan_contract_text", {
+            "text": "제3조 가맹점사업자는 인테리어를 당사가 지정한 업체를 통해서만 시공한다."})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        payload = body["result"]
+        self.assertEqual(payload["verdict"]["code"], "scan_flagged")
+        self.assertTrue(payload["findings"])
+        self.assertIn("필요합니다", payload["not_a_clearance_ko"])
+        self.assertEqual(payload["meta"]["version"], "0.1.2")
+
+        status, body = self.post("/v1/tools/scan_contract_text", {
+            "text": "가맹금은 예치기관에 예치한다. 본부는 2개월 이상의 유예기간을 둔다."})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["result"]["verdict"]["code"], "scan_no_match")
+        self.assertEqual(body["result"]["findings"], [])
+
+        status, body = self.post("/v1/tools/scan_contract_text", {})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"], "invalid_argument")
+
+        status, body = self.post("/v1/tools/scan_contract_text", None, raw=b"{oops")
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"], "invalid_json")
 
     def test_invalid_json_and_limits(self):
         status, body = self.post("/v1/tools/get_service_meta", None, raw=b"{oops")
@@ -208,7 +233,7 @@ class HttpTest(unittest.TestCase):
              "params": {"name": "nope", "arguments": {}}},
         ])
         self.assertEqual(len(body), 3)
-        self.assertEqual(len(body[1]["result"]["tools"]), 6)
+        self.assertEqual(len(body[1]["result"]["tools"]), 7)
         self.assertEqual(body[2]["error"]["code"], -32602)
 
     def test_mcp_parse_error(self):

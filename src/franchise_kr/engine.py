@@ -11,6 +11,10 @@
 
 함정 코퍼스는 `traps.json`(15건)에 있고, 각 케이스의 판정 함수는 이 파일 아래
 `EVALUATORS` 에 1:1로 대응한다.
+
+계약서·특약 문구 스캔(`scan_contract_text`)도 같은 원칙을 따른다. 규칙(`CONTRACT_RULES`)은
+같은 문구에 항상 같은 결과를 주고, 인용은 사용자가 넣은 글자 그대로이며, 잡히는 문구가
+0건이어도 '안전·문제없음'을 쓰지 않는다(`SCAN_NOT_A_CLEARANCE_KO` 고정 문장).
 """
 from __future__ import annotations
 
@@ -231,7 +235,18 @@ def law_excerpt(key: str, limit: int = 420, anchor: str = "") -> str:
     return text[:limit].rstrip() + "…"
 
 
-def law_basis(keys: List[str], anchors: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+def law_label(key: str) -> str:
+    """조문 키 → 사람이 읽는 라벨('가맹사업법:제12조 · 불공정거래행위의 금지')."""
+    record = law_record(key)
+    if not record:
+        return key
+    title = str(record.get("title") or "")
+    # 별표는 키 안에 제목이 이미 들어 있어 두 번 쓰지 않는다.
+    return key if (not title or title in key) else f"{key} · {title}"
+
+
+def law_basis(keys: List[str], anchors: Optional[Dict[str, str]] = None,
+              limit: int = 420) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen = set()
     anchors = anchors or {}
@@ -245,8 +260,7 @@ def law_basis(keys: List[str], anchors: Optional[Dict[str, str]] = None) -> List
             continue
         law_row = laws.get(str(record.get("law") or "")) or {}
         title = str(record.get("title") or "")
-        # 별표는 키 안에 제목이 이미 들어 있어 두 번 쓰지 않는다.
-        label = key if (not title or title in key) else f"{key} · {title}"
+        label = law_label(key)
         out.append({
             "key": key,
             "label_ko": label,
@@ -255,7 +269,7 @@ def law_basis(keys: List[str], anchors: Optional[Dict[str, str]] = None) -> List
             "title": record.get("title"),
             # 별표에는 시행일이 따로 없어 그 법령의 시행일을 쓴다(빈 문자열 노출 방지).
             "effective_on": record.get("effective_on") or law_row.get("effective_on"),
-            "excerpt_ko": law_excerpt(key, anchor=anchors.get(key, "")),
+            "excerpt_ko": law_excerpt(key, limit=limit, anchor=anchors.get(key, "")),
             "source_url": record.get("source_url"),
         })
     return out
@@ -1130,3 +1144,692 @@ def law_meta() -> Dict[str, Any]:
 
 def now_iso() -> str:
     return datetime.now(KST).isoformat(timespec="seconds")
+
+
+# ---------------------------------------------------------------------------
+# 계약서·특약 문구 스캔 (0.1.2)
+# ---------------------------------------------------------------------------
+# 왜 규칙 엔진인가: 같은 문구는 언제 넣어도 같은 결과가 나와야 하고(결정적), 어떤 문구를
+# 어떤 조문과 대조했는지 사용자가 직접 확인할 수 있어야 하기 때문이다. 여기서 하는 일은
+# "이 문구는 계약 전에 확인이 필요하다"까지이고, 위법 여부나 계약 효력의 판정이 아니다.
+#
+# 문구 대조는 공백을 지운 사본에서 한다(계약서는 줄바꿈·띄어쓰기가 제각각이다).
+# 대신 인용문은 원문 위치로 되돌려 잘라 내므로, 화면에 보이는 인용은 사용자가 넣은 글자
+# 그대로다 — 우리가 문장을 만들어 내지 않는다.
+ANNEX_UNFAIR = "가맹사업법 시행령:불공정거래행위의 유형 또는 기준(제13조제1항관련)"
+
+SCAN_MAX_CHARS = 20_000
+SCAN_MIN_CHARS = 8
+SCAN_MAX_FINDINGS_PER_RULE = 3
+SCAN_MAX_FINDINGS = 24
+SCAN_QUOTE_PAD = 44
+
+SCAN_TEXT_KEYS = (
+    "text", "contract_text", "clause_text", "document_text", "document", "content",
+    "body", "special_terms", "special_terms_text", "contract", "특약", "계약서", "문구",
+    "본문", "조항",
+)
+
+SCAN_NOT_A_CLEARANCE_KO = (
+    "제시된 패턴에서 잡히지 않았을 뿐, 다른 특약이나 정보공개서 불일치가 있을 수 있어 "
+    "원문 전체와 가맹거래사 확인이 필요합니다."
+)
+
+# 매칭 직후에 붙는 부정 표현 — "위약금을 부과하지 않는다" 같은 문장을 위험 신호로 세지 않는다.
+SCAN_NEGATION_TAILS = (
+    "하지않", "하지아니", "아니한다", "않는다", "않음", "않고", "할수없", "아니다",
+)
+
+SCAN_QUESTIONS_KO = [
+    "특약 전체(별지·부속합의서 포함)를 정보공개서와 나란히 놓고 같은 내용인지 확인했나요?",
+    "이 문구를 빼거나 고쳐 달라고 본부에 서면으로 요청할 수 있나요?",
+    "계약서 초안을 가맹거래사나 변호사에게 보여 주고 검토받았나요?",
+]
+
+
+def _p(expr: str, note_ko: str = "", severity: str = "", guard: str = "") -> Dict[str, str]:
+    """규칙 안의 문구 패턴 한 줄. 공백은 컴파일할 때 지운다(띄어쓰기 차이를 흡수)."""
+    return {"expr": expr, "note_ko": note_ko, "severity": severity, "guard": guard}
+
+
+CONTRACT_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "purchase_forced",
+        "title_ko": "구입강제·지정업체 강제",
+        "category": "purchase",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "본사가 지정한 업체와만 거래하게 하면 비교견적이 막히고, 자재·시공 단가가 본사 "
+            "재량에 맡겨집니다. 가맹사업법은 경영에 필요한 양을 넘는 시설·설비·상품·용역·"
+            "원재료 구입을 강제하는 행위를 불공정거래행위로 봅니다(법 제12조, 시행령 별표 2 3.가)."
+        ),
+        "fix_ko": (
+            "‘시공·설비·원부자재는 가맹점사업자가 비교견적 후 자유롭게 선정하되, 본사가 정한 "
+            "최소 품질기준(시방)을 충족하면 인정한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "지정 업체 외 거래가 실제로 가능한가요? 지정 업체 단가표와 다른 업체 견적을 함께 "
+            "받아 볼 수 있나요?"
+        ),
+        "law_refs": ["가맹사업법:제12조", "가맹사업법 시행령:제13조", ANNEX_UNFAIR],
+        "anchors": {
+            "가맹사업법:제12조": "부당하게 구속하거나 제한하는",
+            ANNEX_UNFAIR: "가. 구입강제",
+        },
+        "patterns": [
+            _p(r"(당사|본사|회사)가?지정(한|하는|된)(업체|시공사|공급업체|거래처|업자|인테리어업체|설비업체)",
+               "지정 업체와만 거래하도록 묶는 문구입니다."),
+            _p(r"지정(업체|업자|거래처)(외|외에|외에는)(거래|시공|구매|사용|납품)(할수없|금지|불가|불허)",
+               "지정 업체 외 거래를 금지하는 문구입니다."),
+            _p(r"(인테리어|간판|시설|설비|집기|비품|원부자재|부자재|식자재|포장재|물품)(일체|전부|모두)?(는|를|은)?(반드시|필히|오직)?(당사|본사)가?(지정|선정|공급)",
+               "자재·시공사 선택을 본사가 정하는 문구입니다."),
+            _p(r"(당사|본사)가?(공급|지정)하는(물품|자재|원부자재|식자재)(만|외에는)",
+               "본사 공급 물품만 쓰도록 묶는 문구입니다."),
+            _p(r"(타사|타업체|다른업체)(제품|물품)?(의)?(사용|구매|거래|시공|이용)(을|은)?(금지|할수없|불가|제한)",
+               "타사 제품 사용을 막는 문구입니다.", models.SEVERITY_MEDIUM),
+            _p(r"(공급처|거래처)(는|를)?(당사|본사)가?(선정|지정)",
+               "거래처 선정권을 본사가 갖는 문구입니다.", models.SEVERITY_MEDIUM),
+            _p(r"(필수품목|판매목표|최소구매량|구매수량)[^.]{0,16}(강제|의무|이상구매|달성하여야|구매하여야|판매하여야|달성하지못)",
+               "필수품목 구매·판매목표 달성을 의무로 두는 문구입니다.",
+               models.SEVERITY_MEDIUM),
+        ],
+    },
+    {
+        "id": "excessive_penalty",
+        "title_ko": "과중 위약금·손해배상 예정",
+        "category": "penalty",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "잔여기간 로열티 전액·보증금 몰수·2~3배 배상처럼 실제 손해보다 큰 금액을 미리 "
+            "정해 두면, 나갈 때 그 금액을 그대로 물게 됩니다. 법은 계약의 목적·손해 크기·"
+            "귀책 정도에 비해 과중한 위약금을 부당한 손해배상 의무로 봅니다"
+            "(법 제12조①5, 시행령 제12조의2·별표 2 4.가)."
+        ),
+        "fix_ko": (
+            "‘중도해지 위약금은 해지 사유와 잔여기간을 기준으로 산정한 실제 손해 범위에서 정하고, "
+            "보증금은 미지급 가맹금·손해배상 채무를 빼고 반환한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "위약금 산정 근거(잔여기간·예상 손해액)를 서면으로 받을 수 있나요? 보증금 반환 조건은 "
+            "무엇인가요?"
+        ),
+        "law_refs": [
+            "가맹사업법:제12조", "가맹사업법 시행령:제12조의2", ANNEX_UNFAIR,
+        ],
+        "anchors": {
+            "가맹사업법:제12조": "과중한 위약금을 부과하는",
+            "가맹사업법 시행령:제12조의2": "계약의 목적과 내용",
+            ANNEX_UNFAIR: "가. 과중한 위약금 설정",
+        },
+        "patterns": [
+            _p(r"(잔여|남은)(계약)?기간(의)?(로열티|월회비|관리비|가맹비|수수료)(전액|전부|일시)",
+               "남은 기간의 로열티를 전액 위약금으로 잡는 문구입니다."),
+            _p(r"(가맹)?보증금[^.]{0,18}(몰수|귀속|상계)",
+               "보증금을 돌려주지 않는 문구입니다."),
+            _p(r"(보증금|가맹금)(은|을)?(어떠한|어떤|모든)경우에도?(반환하지않|돌려주지않)",
+               "어떤 경우에도 반환하지 않는다는 문구입니다."),
+            _p(r"손해배상(액|금)?(은|을)?(2|3|두|세)배",
+               "손해액의 2~3배를 배상하게 하는 문구입니다."),
+            _p(r"(위약금|위약벌|손해배상예정)[^0-9]{0,14}[0-9]{2,3}%",
+               "위약금을 총투자 대비 큰 비율로 미리 정한 문구입니다.", "", "pct_ge_20"),
+            _p(r"(위약금|손해배상예정)(은|을)?(총투자|총투자금|창업비용|가맹금)(의)?(2|3|두|세)배",
+               "총투자의 2~3배를 위약금으로 정한 문구입니다."),
+        ],
+    },
+    {
+        "id": "unilateral_termination",
+        "title_ko": "일방적 즉시 해지·최고 없는 해지",
+        "category": "termination",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "최고와 유예기간 없이 바로 해지할 수 있다는 조항은 법이 정한 절차를 건너뛰게 "
+            "만듭니다. 본부는 2개월 이상 유예기간을 두고 위반 사실을 구체적으로 밝혀 서면으로 "
+            "2회 이상 통지해야 하고, 그 절차를 거치지 않은 해지는 효력이 없습니다(법 제14조)."
+        ),
+        "fix_ko": (
+            "‘본부는 계약을 해지하려면 2개월 이상의 유예기간을 두고 위반 사실과 시정 요구를 "
+            "서면으로 2회 이상 통지한 뒤 해지한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": "해지 전에 시정할 기회를 서면으로 받을 수 있나요? 통지 횟수와 방법이 계약서에 적혀 있나요?",
+        "law_refs": ["가맹사업법:제14조", "가맹사업법 시행령:제15조"],
+        "anchors": {"가맹사업법:제14조": "2개월 이상의 유예기간"},
+        "patterns": [
+            _p(r"(즉시|즉각|바로)[^.]{0,8}(해지|해제)", "절차 없이 바로 해지할 수 있게 한 문구입니다."),
+            _p(r"(최고|통지|서면통지|시정요구)(를|을)?(거치지않고|받지않고|없이|없는)[^.]{0,10}(해지|해제)",
+               "최고·통지 없이 해지할 수 있게 한 문구입니다."),
+            _p(r"(당사|본사)(의)?(판단|결정|요청)만으로(해지|해제)",
+               "본사 판단만으로 해지할 수 있게 한 문구입니다."),
+            _p(r"(유예기간)(을)?(두지않|없이|적용하지않)",
+               "유예기간을 두지 않는다는 문구입니다."),
+            _p(r"(당사|본사)(는)?(언제든지|임의로|일방적으로)[^.]{0,10}(해지|해제)",
+               "본사 마음대로 해지할 수 있게 한 문구입니다."),
+            _p(r"(경고|시정요구)(1|한|일)회(로)?(즉시)?(해지|해제)",
+               "한 번의 경고로 바로 해지하는 문구입니다.", models.SEVERITY_MEDIUM),
+        ],
+    },
+    {
+        "id": "territory_infringement",
+        "title_ko": "영업지역 미보장·인근 출점 허용",
+        "category": "territory",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "영업지역 보호가 없거나 본사가 인근에 직영점·가맹점을 열 수 있다는 조항이면, 내가 "
+            "만든 매출을 옆 점포가 가져갈 수 있습니다. 법은 계약서에 영업지역을 기재하게 하고, "
+            "정당한 사유 없이 영업지역 안에 같은 업종의 직영점이나 가맹점을 설치하는 것을 "
+            "금지합니다(법 제12조의4)."
+        ),
+        "fix_ko": (
+            "‘본사는 계약기간 중 가맹점사업자의 영업지역(행정동·반경으로 표기) 안에 동일 업종의 "
+            "직영점이나 가맹점을 설치하지 않는다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "영업지역이 계약서에 행정동이나 반경으로 적혀 있나요? 인근 출점 계획이 있는지 서면으로 "
+            "확인할 수 있나요?"
+        ),
+        "law_refs": ["가맹사업법:제12조의4", "가맹사업법 시행령:제13조의4", "가맹사업법:제11조"],
+        "anchors": {"가맹사업법:제12조의4": "영업지역 안에서"},
+        "patterns": [
+            _p(r"영업지역(을|은|를)?(보장하지않|보호하지않|설정하지않|인정하지않|두지않)",
+               "영업지역을 보장하지 않는다는 문구입니다."),
+            _p(r"영업지역(에)?(대한)?(독점|배타적)(적)?(권리|보호)(는)?(없|부여하지않)",
+               "독점·배타적 권리가 없다는 문구입니다."),
+            _p(r"(인근|주변|반경[0-9]+(km|미터|m))(에|내)?(직영점|직영매장|가맹점|점포)(을)?(출점|개설|설치)(할수있|가능)",
+               "영업지역 주변에 본사가 점포를 열 수 있게 한 문구입니다."),
+            _p(r"(당사|본사)(의)?(판단|필요)(에)?(따라|의해)(인근|주변)?(출점|추가출점|가맹점개설|신규출점)",
+               "본사 판단으로 추가 출점할 수 있게 한 문구입니다."),
+            _p(r"(직영점|직영매장)(을)?(제한없이|자유롭게|언제든지|임의로)(출점|개설|설치)",
+               "직영점 출점에 제한이 없다는 문구입니다."),
+            _p(r"영업지역(내)?(추가)?출점(을)?(제한하지않|허용)",
+               "영업지역 안 추가 출점을 허용한 문구입니다."),
+        ],
+    },
+    {
+        "id": "cooling_off_waiver",
+        "title_ko": "숙고기간 포기·계약과 동시 입금",
+        "category": "cooling_off",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "숙고기간을 포기하게 하거나 계약과 동시에 가맹금을 받는 조항은 조건을 비교할 14일을 "
+            "없앱니다. 정보공개서를 받은 날부터 14일(자문을 받은 경우 7일)이 지나기 전에는 "
+            "가맹계약 체결이나 가맹금 수령을 할 수 없습니다(법 제7조③)."
+        ),
+        "fix_ko": (
+            "‘가맹희망자는 정보공개서를 받은 날부터 14일(자문 시 7일)이 지난 뒤 계약을 체결하고 "
+            "가맹금을 납부한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "정보공개서를 받은 날짜와 계약 예정일이 어떻게 되나요? 숙고기간을 건너뛰는 별도 합의서를 "
+            "요구했나요?"
+        ),
+        "law_refs": ["가맹사업법:제7조", "가맹사업법 시행령:제6조", "가맹사업법:제11조"],
+        "anchors": {"가맹사업법:제7조": "14일"},
+        "patterns": [
+            _p(r"(14|십사)일(의)?(숙고기간|기간)(을)?(포기|면제|단축|적용하지않|배제)",
+               "숙고기간을 포기·단축하게 하는 문구입니다."),
+            _p(r"숙고기간(을)?(포기|면제|적용하지않|두지않)",
+               "숙고기간을 적용하지 않는다는 문구입니다."),
+            _p(r"정보공개서(를)?(받은)?(당일|즉시|바로)(계약|서명|체결)",
+               "정보공개서를 받은 당일 계약하게 하는 문구입니다."),
+            _p(r"(계약(체결)?(과)?동시에|계약당일|계약즉시)(가맹금|가맹비|보증금|교육비)?[^.]{0,40}(납부|입금|지급)",
+               "계약과 동시에 돈을 받는 문구입니다."),
+            _p(r"가맹금(은|을)?(계약(체결)?(전|즉시)|협약즉시)(납부|입금|지급)",
+               "계약 전·즉시 가맹금을 받는 문구입니다."),
+        ],
+    },
+    {
+        "id": "payment_to_hq",
+        "title_ko": "가맹금 본사 직접 수령",
+        "category": "payment",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "가맹금을 본사 계좌로 직접 받으면 계약이 틀어졌을 때 돈을 돌려받을 장치가 사라집니다. "
+            "법은 가맹금을 예치기관에 예치하도록 하거나 가맹점사업자피해보상보험계약을 "
+            "체결하도록 정하고 있습니다(법 제6조의5, 제15조의2)."
+        ),
+        "fix_ko": (
+            "‘가맹금은 법이 정한 예치기관에 예치하고, 예치 사실을 확인한 뒤 지급한다’로 바꿔 달라고 "
+            "요청하세요."
+        ),
+        "ask_ko": "예치기관과 예치 계좌를 알려 줄 수 있나요? 피해보상보험계약 증서를 받았나요?",
+        "law_refs": ["가맹사업법:제6조의5", "가맹사업법:제15조의2", "가맹사업법 시행령:제5조의8"],
+        "anchors": {"가맹사업법:제6조의5": "예치하도록 하여야 한다"},
+        "patterns": [
+            _p(r"(가맹금|가맹비|보증금|교육비)[^.]{0,16}(당사|본사|회사)(의)?(계좌|명의)(로|에)(직접)?(입금|송금|납부|지급)",
+               "가맹금을 본사 계좌로 받는 문구입니다."),
+            _p(r"(당사|본사)(의)?계좌(로|에)(직접|바로)(입금|송금|납부)",
+               "본사 계좌 입금을 요구하는 문구입니다."),
+            _p(r"예치(하지않|없이|생략|대신)", "예치하지 않는다는 문구입니다."),
+            _p(r"(예치기관|피해보상보험)(을|은|는)?(거치지않|통하지않|이용하지않)",
+               "예치·보험을 거치지 않는다는 문구입니다."),
+            _p(r"현금(으로)?(당사|본사)(에)?(직접)?(지급|납부|전달)",
+               "현금으로 본사에 내라는 문구입니다.", models.SEVERITY_MEDIUM),
+        ],
+    },
+    {
+        "id": "ad_cost_unilateral",
+        "title_ko": "광고·판촉비 일방 부담",
+        "category": "advertising",
+        "severity": models.SEVERITY_MEDIUM,
+        "why_ko": (
+            "점주에게 광고·판촉비를 일방적으로 청구하고 사전 동의를 받지 않는 조항은 비용 부담을 "
+            "떠넘기는 구조입니다. 법은 점주가 비용을 부담하는 광고·판촉행사를 하려면 정해진 비율 "
+            "이상의 동의를 받고, 집행 내역을 통보하고 열람하게 해야 한다고 정합니다(법 제12조의6)."
+        ),
+        "fix_ko": (
+            "‘광고·판촉행사는 비용 부담 비율과 집행 내역을 사전에 서면으로 합의하고, 동의한 "
+            "가맹점사업자에게만 부과한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": "광고비 부담 비율과 동의 절차가 계약서에 적혀 있나요? 지난 집행 내역을 열람할 수 있나요?",
+        "law_refs": ["가맹사업법:제12조의6", "가맹사업법 시행령:제13조의5", "가맹사업법 시행령:제13조의6"],
+        "anchors": {"가맹사업법:제12조의6": "동의를 받아야 한다"},
+        "patterns": [
+            _p(r"(광고|판촉|홍보)[^.]{0,8}(비|비용)[^.]{0,14}(가맹점|가맹점사업자|점주)(이|가|에게)?(부담|청구|지급|납부)",
+               "광고·판촉비를 점주가 부담하는 문구입니다."),
+            _p(r"(당사|본사)가?(실시한)?(광고|판촉)(비용|비)(을)?(가맹점|점주)(에게)?(청구|부과|전가)",
+               "본사 광고비를 점주에게 청구하는 문구입니다."),
+            _p(r"(사전동의|협의)(없이|를받지않고)?(광고|판촉)(행사|비용)?(을)?(실시|청구|부과|징수)",
+               "사전 동의 없이 광고·판촉비를 매기는 문구입니다."),
+            _p(r"(광고비|판촉비)(를)?(매월|매년|정기적)(으로)?(징수|청구|납부)",
+               "광고비를 정기적으로 걷는 문구입니다."),
+        ],
+    },
+    {
+        "id": "revenue_guarantee",
+        "title_ko": "매출·수익 보장·적자 보전",
+        "category": "revenue",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "매출·수익을 보장하거나 적자를 보전해 준다는 문구는 계약서에 남는 순간 나중에 책임 "
+            "소재가 뒤집힙니다. 법은 예상매출액·수익 정보를 서면으로 주고 산출근거를 열람하게 "
+            "하며, 허위·과장된 정보 제공을 금지합니다(법 제9조)."
+        ),
+        "fix_ko": (
+            "‘예상매출액은 산정서와 산출근거를 서면으로 제공하며, 실제 매출을 보장하지는 "
+            "않는다’로 명확히 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": "매출 보장 문구를 서면으로 남길 수 있나요? 예상매출액 산정서와 산출근거를 받았나요?",
+        "law_refs": ["가맹사업법:제9조", "가맹사업법 시행령:제8조", "가맹사업법 시행령:제9조"],
+        "anchors": {"가맹사업법:제9조": "서면으로 하여야 한다"},
+        "patterns": [
+            _p(r"(?<!\()(월|일|연)?(순수익|순이익|수익|매출|영업이익|매출액)[^.]{0,18}(보장|확약|보증해|보증한다)",
+               "매출·수익을 보장하는 문구입니다."),
+            _p(r"(적자|손실)[^.]{0,12}(당사|본사)(가)?[^.]{0,6}(보전|보상|책임)",
+               "적자를 본사가 보전해 준다는 문구입니다."),
+            _p(r"(원금|투자금)(을)?(보장|회수해준다|회수보장)",
+               "투자금 회수를 보장하는 문구입니다.", models.SEVERITY_MEDIUM),
+            _p(r"(수익|매출)(이|을)?(보장된다|확실하다|틀림없다)",
+               "수익이 확실하다고 단정하는 문구입니다."),
+        ],
+    },
+    {
+        "id": "hours_bound",
+        "title_ko": "영업시간 구속·심야 영업 강제",
+        "category": "hours",
+        "severity": models.SEVERITY_MEDIUM,
+        "why_ko": (
+            "영업시간을 본사가 정하고 단축을 허용하지 않는 조항은 점주의 시간과 인건비를 "
+            "묶습니다. 법은 심야 영업손실이 나는데도 단축을 허용하지 않거나, 질병 같은 "
+            "불가피한 사유의 단축 요구를 막는 행위를 부당한 영업시간 구속으로 봅니다"
+            "(법 제12조의3, 시행령 제13조의3)."
+        ),
+        "fix_ko": (
+            "‘영업시간은 가맹점사업자가 상권과 인력 사정을 고려해 정하고, 본사는 손실이 나는 "
+            "심야 시간대의 단축 요구를 허용한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": "영업시간을 점주가 조정할 수 있나요? 심야 영업 손실이 날 때 단축 요구 절차가 있나요?",
+        "law_refs": ["가맹사업법:제12조의3", "가맹사업법 시행령:제13조의3"],
+        "anchors": {
+            "가맹사업법:제12조의3": "심야 영업시간대",
+            "가맹사업법 시행령:제13조의3": "심야 영업시간대",
+        },
+        "patterns": [
+            _p(r"영업(시간|시각)(은|을)?(당사|본사)가?(정한|지정한|정하는|지시한)",
+               "영업시간을 본사가 정하는 문구입니다."),
+            _p(r"영업시간(을)?(임의로)?(변경|단축)(할수없|금지|불가)",
+               "영업시간 변경·단축을 막는 문구입니다."),
+            _p(r"(24시간|연중무휴|심야|새벽)영업(을)?(의무|강제|하여야|실시하여야)",
+               "심야·24시간 영업을 의무로 하는 문구입니다."),
+            _p(r"(영업시간|휴무일)(을)?(당사|본사)가?(지정|결정)",
+               "휴무일까지 본사가 정하는 문구입니다."),
+            _p(r"영업시간단축(을)?(허용하지않|불허|인정하지않)",
+               "영업시간 단축을 허용하지 않는 문구입니다."),
+        ],
+    },
+    {
+        "id": "renewal_restraint",
+        "title_ko": "갱신 거절 제한·과도한 경업금지",
+        "category": "renewal",
+        "severity": models.SEVERITY_MEDIUM,
+        "why_ko": (
+            "계약이 끝난 뒤 오랫동안 같은 업종을 못 하게 하거나, 본사가 사유를 넓게 잡아 갱신을 "
+            "거절할 수 있게 한 조항은 다음 계약을 막습니다. 법은 갱신 요구를 정당한 사유 없이 "
+            "거절하지 못하게 하고, 거절할 때는 15일 이내에 사유를 서면으로 통지하게 합니다"
+            "(법 제13조)."
+        ),
+        "fix_ko": (
+            "‘계약 갱신은 법이 정한 사유가 있을 때만 거절하고, 거절하면 15일 이내에 사유를 서면으로 "
+            "통지한다. 경업금지는 계약기간 중 같은 상권으로 한정한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": "갱신 거절 사유가 구체적으로 적혀 있나요? 계약 종료 후 경업금지 기간과 지역은 얼마인가요?",
+        "law_refs": ["가맹사업법:제13조", "가맹사업법 시행령:제14조", "가맹사업법:제12조"],
+        "anchors": {"가맹사업법:제13조": "거절하지 못한다"},
+        "patterns": [
+            _p(r"(계약|계약기간)?(종료|만료|해지)(후|이후)[^.]{0,30}(경업|겸업|동일업종|같은업종)[^.]{0,12}(금지|제한|할수없)",
+               "계약이 끝난 뒤 같은 업종 영업을 막는 문구입니다."),
+            _p(r"(경업|겸업)금지기간(을|은)?[^.]{0,12}(1|2|3|5|십)년",
+               "경업금지 기간을 길게 잡은 문구입니다."),
+            _p(r"(계약)?(종료|만료)(후)?[^.]{0,20}(1|2|3|5|십|이|삼|오)년(간|동안)?[^.]{0,16}업종[^.]{0,8}(금지|제한|할수없)",
+               "계약 종료 뒤 오랫동안 같은 업종을 막는 문구입니다."),
+            _p(r"반경[0-9]+(km|킬로미터|미터|m)(이내)?(동일|같은)?업종(창업|영업)(을|를)?(금지|제한)",
+               "반경 안 같은 업종 창업을 막는 문구입니다."),
+            _p(r"(갱신|재계약)(을)?(거절할수있|하지않을수있|거부할수있)",
+               "갱신을 거절할 수 있다는 문구입니다."),
+            _p(r"갱신(요구)?(를)?(할수없|금지|불가)",
+               "갱신 요구 자체를 막는 문구입니다.", models.SEVERITY_HIGH),
+            _p(r"(전체)?계약기간(을)?(10|십)년(초과|이상)",
+               "갱신 요구권 10년 한도를 넘기는 문구입니다."),
+        ],
+    },
+]
+
+CONTRACT_RULE_INDEX: Dict[str, Dict[str, Any]] = {
+    rule["id"]: rule for rule in CONTRACT_RULES
+}
+
+_PCT_RE = re.compile(r"([0-9]{1,3}) ?%")
+
+
+def _guard_pct_ge_20(matched: str) -> bool:
+    """'위약금 … 20%' 처럼 비율이 20% 이상일 때만 신호로 센다."""
+    return any(int(value) >= 20 for value in _PCT_RE.findall(matched))
+
+
+SCAN_GUARDS: Dict[str, Callable[[str], bool]] = {"pct_ge_20": _guard_pct_ge_20}
+
+
+@lru_cache(maxsize=256)
+def _scan_pattern(expr: str) -> "re.Pattern[str]":
+    """문구 패턴 — 띄어쓰기 차이를 흡수하려고 공백을 지운 뒤 컴파일한다."""
+    return re.compile(re.sub(r"\s+", "", expr))
+
+
+def _compact_map(text: str) -> Tuple[str, List[int]]:
+    """공백을 지운 사본과, 사본 글자 → 원문 위치 표."""
+    chars: List[str] = []
+    mapping: List[int] = []
+    for index, char in enumerate(text):
+        if char.isspace():
+            continue
+        chars.append(char)
+        mapping.append(index)
+    return "".join(chars), mapping
+
+
+def _scan_bounds(text: str, start: int, end: int, pad: int) -> Tuple[int, int]:
+    """매칭 위치 → 문장 경계로 다듬은 [시작, 끝) 구간."""
+    left = max(0, start - pad)
+    right = min(len(text), end + pad)
+    head = text[left:start]
+    cut = max(head.rfind("\n"), head.rfind(". "))
+    if cut >= 0:
+        left += cut + 1
+    tail = text[end:right]
+    stops = [position for position in (tail.find("\n"), tail.find(". ")) if position >= 0]
+    if stops:
+        right = end + min(stops) + 1
+    return left, right
+
+
+def _scan_sentence_key(text: str, start: int, end: int) -> str:
+    """매칭을 둘러싼 문장 전체 — 같은 문장의 중복 매칭을 하나로 줄이는 열쇠."""
+    head = text[:start]
+    left = max(head.rfind("\n"), head.rfind(". ")) + 1
+    tail = text[end:]
+    stops = [position for position in (tail.find("\n"), tail.find(". ")) if position >= 0]
+    right = end + (min(stops) + 1 if stops else len(text) - end)
+    return re.sub(r"\s+", "", text[left:right]).rstrip(".")
+
+
+def _scan_quote(text: str, start: int, end: int) -> str:
+    """매칭 위치 → 원문 그대로의 인용문(문장 경계에서 자른다)."""
+    left, right = _scan_bounds(text, start, end, SCAN_QUOTE_PAD)
+    quote = re.sub(r"\s+", " ", text[left:right]).strip()
+    if left > 0:
+        quote = "…" + quote
+    if right < len(text):
+        quote = quote + "…"
+    return quote
+
+
+def _scan_hits(rule: Dict[str, Any], text: str, compact: str,
+               mapping: List[int]) -> List[Dict[str, Any]]:
+    """규칙 1건의 매칭 — 겹치는 매칭은 하나로 줄이고, 부정 문장은 건너뛴다."""
+    hits: List[Dict[str, Any]] = []
+    for entry in rule["patterns"]:
+        pattern = _scan_pattern(entry["expr"])
+        for match in pattern.finditer(compact):
+            if match.end() <= match.start():
+                continue
+            start = mapping[match.start()]
+            end = mapping[match.end() - 1] + 1
+            window = re.sub(r"\s+", "", text[end:end + 6])
+            # 매칭 바로 뒤에 부정 표현이 붙으면("부과하지 않는다") 위험 신호로 세지 않는다.
+            if any(window.startswith(word) for word in SCAN_NEGATION_TAILS):
+                continue
+            guard = entry.get("guard") or ""
+            if guard and not SCAN_GUARDS[guard](match.group(0)):
+                continue
+            hits.append({
+                "start": start,
+                "end": end,
+                "matched_ko": match.group(0),
+                "severity": entry.get("severity") or rule["severity"],
+                "note_ko": entry.get("note_ko") or "",
+            })
+    hits.sort(key=lambda row: (row["start"], -(row["end"] - row["start"])))
+    kept: List[Dict[str, Any]] = []
+    blocked: List[Dict[str, Any]] = []
+    seen_sentences = set()
+
+    def overlaps(row: Dict[str, Any], rows: List[Dict[str, Any]]) -> bool:
+        return any(row["start"] < other["end"] and other["start"] < row["end"]
+                   for other in rows)
+
+    for hit in hits:
+        if overlaps(hit, kept) or overlaps(hit, blocked):
+            continue
+        key = _scan_sentence_key(text, hit["start"], hit["end"])
+        # 한 문장에 여러 패턴이 걸리거나 문구가 반복되면 한 번만 보여 준다.
+        if key in seen_sentences:
+            blocked.append(hit)
+            continue
+        seen_sentences.add(key)
+        hit["quote_ko"] = _scan_quote(text, hit["start"], hit["end"])
+        kept.append(hit)
+    return kept
+
+
+def _scan_input_text(args: Any) -> Tuple[str, str]:
+    if isinstance(args, str):
+        return (args, "text") if args.strip() else ("", "")
+    raw = args if isinstance(args, dict) else {}
+    nested = raw.get("document") if isinstance(raw.get("document"), dict) else {}
+    for block in (raw, nested):
+        for key in SCAN_TEXT_KEYS:
+            value = block.get(key)
+            if isinstance(value, str) and value.strip():
+                return value, key
+            if isinstance(value, list) and all(isinstance(row, str) for row in value):
+                joined = "\n".join(value)
+                if joined.strip():
+                    return joined, key
+    return "", ""
+
+
+def scan_contract_text(args: Any) -> Dict[str, Any]:
+    """계약서·특약 문구 → 확인이 필요한 문구·근거 조문·요청할 수정 문구.
+
+    0건이어도 '안전·문제없음'을 쓰지 않는다. "제시된 패턴에서 잡히지 않았을 뿐"이라는
+    고정 문장(`SCAN_NOT_A_CLEARANCE_KO`)을 항상 붙인다.
+    """
+    raw_text, source_key = _scan_input_text(args)
+    if not raw_text.strip():
+        raise ValueError(
+            "스캔할 계약서·특약 문구를 주세요. 예: {\"text\": \"인테리어는 당사가 지정한 "
+            "업체를 통해서만 시공한다\"}")
+    text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
+    truncated = len(text) > SCAN_MAX_CHARS
+    if truncated:
+        text = text[:SCAN_MAX_CHARS]
+    compact, mapping = _compact_map(text)
+    if len(compact) < SCAN_MIN_CHARS:
+        payload = {
+            "scanned": {"chars": len(text), "non_space_chars": len(compact),
+                        "truncated": False, "source_field": source_key or "text"},
+            "verdict": models.scan_verdict_block(models.SCAN_VERDICT_TEXT_NEEDED),
+            "counts": {"flagged": 0, "high": 0, "medium": 0, "low": 0,
+                       "rules_checked": len(CONTRACT_RULES), "rules_matched": 0},
+            "summary_ko": ("스캔할 문구가 너무 짧습니다. 계약서·특약 조항을 한 문장 이상 "
+                           "그대로 붙여 넣어 주세요."),
+            "findings": [],
+            "checks_ko": [
+                {"rule_id": rule["id"], "title_ko": rule["title_ko"],
+                 "result_ko": "확인하지 못함(문구 부족)", "matched_count": 0}
+                for rule in CONTRACT_RULES
+            ],
+            "not_a_clearance_ko": SCAN_NOT_A_CLEARANCE_KO,
+            "questions_ko": list(SCAN_QUESTIONS_KO),
+            "request_edits_ko": [],
+            "law_basis": law_basis(["가맹사업법:제7조", "가맹사업법:제12조", "가맹사업법:제14조"],
+                                    limit=200),
+            "law_basis_scope_ko": "문구가 모자라 대조하지 못했습니다.",
+            "next_steps": _scan_next_steps(),
+            "disclaimer_ko": models.DISCLAIMER_KO,
+            "scope_limits_ko": models.SCOPE_LIMITS_KO + [
+                "문구 스캔은 정규식 규칙으로 표시된 패턴만 찾습니다. 문장의 맥락·예외 조항·"
+                "별지 특약 전체를 해석하지 않습니다.",
+            ],
+        }
+        return payload
+
+    findings: List[Dict[str, Any]] = []
+    checks: List[Dict[str, Any]] = []
+    extra_matches = 0
+    matched_rules = 0
+    refs: List[str] = []
+    anchors: Dict[str, str] = {}
+    order = {severity: index for index, severity in enumerate(models.SEVERITY_ORDER)}
+    for rule in CONTRACT_RULES:
+        hits = _scan_hits(rule, text, compact, mapping)
+        shown = hits[:SCAN_MAX_FINDINGS_PER_RULE]
+        extra_matches += max(0, len(hits) - len(shown))
+        checks.append({
+            "rule_id": rule["id"], "title_ko": rule["title_ko"],
+            "category": rule["category"],
+            "category_label_ko": models.CATEGORY_LABELS_KO.get(rule["category"], ""),
+            "result_ko": (f"문구 {len(hits)}건 확인" if hits else "제시된 패턴에서 잡힌 문구 없음"),
+            "matched_count": len(hits),
+        })
+        if not hits:
+            continue
+        matched_rules += 1
+        for key in rule["law_refs"]:
+            refs.append(key)
+        for key, anchor in (rule.get("anchors") or {}).items():
+            anchors.setdefault(key, anchor)
+        for hit in shown:
+            findings.append({
+                "rule_id": rule["id"],
+                "title_ko": rule["title_ko"],
+                "category": rule["category"],
+                "category_label_ko": models.CATEGORY_LABELS_KO.get(rule["category"], ""),
+                "severity": hit["severity"],
+                "severity_label_ko": models.severity_label(hit["severity"]),
+                "matched_text_ko": hit["quote_ko"],
+                "matched_exact_ko": hit["matched_ko"],
+                "offset": hit["start"],
+                "note_ko": hit["note_ko"],
+                "why_ko": rule["why_ko"],
+                "request_edit_ko": rule["fix_ko"],
+                "ask_ko": rule["ask_ko"],
+                "law_refs": list(rule["law_refs"]),
+                "law_refs_ko": [law_label(key) for key in rule["law_refs"]],
+            })
+    findings.sort(key=lambda row: (order.get(row["severity"], 9), row["offset"]))
+    if len(findings) > SCAN_MAX_FINDINGS:
+        extra_matches += len(findings) - SCAN_MAX_FINDINGS
+        findings = findings[:SCAN_MAX_FINDINGS]
+    high = sum(1 for row in findings if row["severity"] == models.SEVERITY_HIGH)
+    medium = sum(1 for row in findings if row["severity"] == models.SEVERITY_MEDIUM)
+    low = sum(1 for row in findings if row["severity"] == models.SEVERITY_LOW)
+    verdict_code = (models.SCAN_VERDICT_FLAGGED if findings else models.SCAN_VERDICT_NO_MATCH)
+    if findings:
+        parts = [f"입력한 문구에서 계약 전에 확인이 필요한 문구 {len(findings)}건을 찾았습니다."]
+        if high:
+            parts.append(f"그중 위험 높음 {high}건은 계약·입금 전에 먼저 확인하세요.")
+        parts.append("항목마다 본부에 요청할 수 있는 수정 문구를 함께 적었습니다.")
+        summary = " ".join(parts)
+    else:
+        summary = (f"입력한 문구에서는 제시된 {len(CONTRACT_RULES)}개 유형과 겹치는 문구가 "
+                   "없었습니다. 이것은 원문 전체를 검토한 결과가 아닙니다.")
+    request_edits = []
+    seen_rules = set()
+    for row in findings:
+        if row["rule_id"] in seen_rules:
+            continue
+        seen_rules.add(row["rule_id"])
+        request_edits.append({"rule_id": row["rule_id"], "title_ko": row["title_ko"],
+                              "request_ko": row["request_edit_ko"]})
+    if findings:
+        basis_refs, basis_limit, basis_scope = refs, 320, "확인된 문구의 근거 조문입니다."
+    else:
+        basis_refs = [key for rule in CONTRACT_RULES for key in rule["law_refs"]]
+        basis_limit = 200
+        basis_scope = ("위험 문구가 확인되지 않아, 제시된 유형을 대조한 근거 조문을 실었습니다. "
+                       "조문이 있다는 것만으로 이 계약이 적법하다는 뜻이 아닙니다.")
+    questions = list(SCAN_QUESTIONS_KO)
+    for row in findings:
+        if row["ask_ko"] and row["ask_ko"] not in questions:
+            questions.append(row["ask_ko"])
+    payload = {
+        "scanned": {
+            "chars": len(text), "non_space_chars": len(compact),
+            "truncated": truncated, "source_field": source_key or "text",
+            "max_chars": SCAN_MAX_CHARS,
+        },
+        "verdict": models.scan_verdict_block(verdict_code),
+        "counts": {
+            "flagged": len(findings), "high": high, "medium": medium, "low": low,
+            "rules_checked": len(CONTRACT_RULES), "rules_matched": matched_rules,
+            "more_matches": extra_matches,
+        },
+        "summary_ko": summary,
+        "findings": findings,
+        "checks_ko": checks,
+        "not_a_clearance_ko": SCAN_NOT_A_CLEARANCE_KO,
+        "questions_ko": questions[:8],
+        "request_edits_ko": request_edits,
+        "law_basis": law_basis(basis_refs, anchors if findings else None, limit=basis_limit),
+        "law_basis_scope_ko": basis_scope,
+        "next_steps": _scan_next_steps(),
+        "disclaimer_ko": models.DISCLAIMER_KO,
+        "scope_limits_ko": models.SCOPE_LIMITS_KO + [
+            "문구 스캔은 정규식 규칙으로 표시된 패턴만 찾습니다. 문장의 맥락·예외 조항·"
+            "별지 특약 전체를 해석하지 않습니다.",
+        ],
+    }
+    return payload
+
+
+def _scan_next_steps() -> List[Dict[str, str]]:
+    return [
+        {"title_ko": "문구를 본부에 그대로 보내 수정 요청",
+         "detail_ko": "결과의 인용 문구와 요청 문구를 복사해 서면(메일)으로 남기세요.",
+         "url": ""},
+        {"title_ko": "정보공개서와 특약 대조",
+         "detail_ko": "등록된 정보공개서와 계약서·특약의 내용이 같은지 항목별로 확인하세요.",
+         "url": DISCLOSURE_PORTAL},
+        {"title_ko": "가맹거래사·변호사 검토",
+         "detail_ko": "특약 전체를 보여 주고 계약 전에 검토받으세요. 스캔은 그 검토를 대신하지 않습니다.",
+         "url": ""},
+    ]

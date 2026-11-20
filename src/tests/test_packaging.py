@@ -91,13 +91,43 @@ class EnvAndIgnoreTest(unittest.TestCase):
         self.assertIn("data/app.sqlite", text)
 
 
+class WorkflowTest(unittest.TestCase):
+    """CI·레지스트리 게시 워크플로 — 툴 개수 단언과 게시 단계가 빠지지 않게 고정한다."""
+
+    def test_test_workflow_asserts_seven_tools_and_smokes_scan(self):
+        text = read(".github/workflows/test.yml")
+        self.assertIn('== 7', text)
+        self.assertNotIn('== 6', text)
+        self.assertIn("/v1/tools/scan_contract_text", text)
+        self.assertIn("scan_flagged", text)
+        self.assertIn("not_a_clearance_ko", text)
+
+    def test_publish_workflow_publishes_with_oidc(self):
+        text = read(".github/workflows/publish-mcp-registry.yml")
+        for marker in ("tags: [\"v*\"]", "workflow_dispatch", "id-token: write",
+                       "mcp-publisher login github-oidc", "mcp-publisher publish",
+                       "cosign verify-blob", "server.json", "remotes"):
+            self.assertIn(marker, text, marker)
+        self.assertNotIn("MCP_GITHUB_PAT", text)
+        self.assertNotIn("ghp_", text)
+
+    def test_server_json_url_matches_publish_workflow_check(self):
+        text = read(".github/workflows/publish-mcp-registry.yml")
+        with open(os.path.join(PROJECT, "server.json"), "r", encoding="utf-8") as handle:
+            url = json.load(handle)["remotes"][0]["url"]
+        self.assertIn("remotes", text)
+        self.assertTrue(url.startswith("https://"))
+
+
 class ReadmeTest(unittest.TestCase):
     def setUp(self):
         self.text = read("README.md")
 
     def test_readme_covers_the_basics(self):
         for marker in ("FRNC", "프랜차이즈", "확정 판정이 아닙니다", "/mcp", "/v1/tools",
-                       "활용신청", "law-verification.json", "MIT"):
+                       "활용신청", "law-verification.json", "MIT",
+                       "scan_contract_text", "특약·계약서 문구 1초 스캔",
+                       "제시된 패턴에서 잡히지 않았을 뿐"):
             self.assertIn(marker, self.text, marker)
 
     def test_readme_documents_verification_limits(self):

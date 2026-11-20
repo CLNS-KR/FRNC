@@ -1,11 +1,14 @@
 """판정 등급·표현 상수 — 코드·웹·테스트가 같은 표를 쓴다.
 
-이 서비스는 **확정 판정을 하지 않습니다**. 세 가지 표현만 씁니다.
+이 서비스는 **확정 판정을 하지 않습니다**. 조건 판정에는 세 가지 표현만 씁니다.
 - `check_likely`  확인이 필요한 위험 신호가 뚜렷함 (초록불 아님)
 - `info_needed`   입력이 모자라 지금은 판정을 보류함
 - `low_risk`      제시된 조건에서는 뚜렷한 위험 신호가 보이지 않음 (확정 아님)
 
 `high`/`medium`/`low` 는 개별 위험 신호의 무게이고, `check_likely` 와 다른 축입니다.
+
+계약서·특약 문구 스캔은 `scan_flagged` / `scan_no_match` / `scan_text_needed` 세 가지를 쓰고,
+0건이어도 '안전·문제없음'이라고 쓰지 않습니다(아래 `SCAN_VERDICT_*`).
 """
 from __future__ import annotations
 
@@ -52,6 +55,23 @@ CATEGORY_LABELS_KO = {
     "advertising": "광고·판촉비",
     "pricing": "가격 결정",
     "registration": "정보공개서 등록",
+    "hours": "영업시간 구속",
+}
+
+# 계약서·특약 문구 스캔의 세 가지 결론 — '안전'도 '문제없음'도 쓰지 않는다.
+SCAN_VERDICT_FLAGGED = "scan_flagged"
+SCAN_VERDICT_NO_MATCH = "scan_no_match"
+SCAN_VERDICT_TEXT_NEEDED = "scan_text_needed"
+SCAN_VERDICT_ORDER = (SCAN_VERDICT_FLAGGED, SCAN_VERDICT_NO_MATCH, SCAN_VERDICT_TEXT_NEEDED)
+SCAN_VERDICT_LABELS_KO = {
+    SCAN_VERDICT_FLAGGED: "확인이 필요한 문구 있음",
+    SCAN_VERDICT_NO_MATCH: "제시된 패턴에서 잡힌 문구 없음",
+    SCAN_VERDICT_TEXT_NEEDED: "스캔할 문구가 더 필요함",
+}
+SCAN_VERDICT_ONELINE_KO = {
+    SCAN_VERDICT_FLAGGED: "계약 전에 본부와 문구 수정을 이야기할 항목이 있습니다. 확정 판정은 아닙니다.",
+    SCAN_VERDICT_NO_MATCH: "제시된 패턴과 겹치는 문구가 없었습니다. 원문 전체 검토를 대신하지 않습니다.",
+    SCAN_VERDICT_TEXT_NEEDED: "스캔할 문구가 너무 짧습니다. 특약·계약서 조항을 그대로 붙여 넣어 주세요.",
 }
 
 DISCLAIMER_KO = (
@@ -77,6 +97,14 @@ def verdict_block(code: str) -> Dict[str, str]:
         "code": code,
         "label_ko": VERDICT_LABELS_KO.get(code, code),
         "one_line_ko": VERDICT_ONELINE_KO.get(code, ""),
+    }
+
+
+def scan_verdict_block(code: str) -> Dict[str, str]:
+    return {
+        "code": code,
+        "label_ko": SCAN_VERDICT_LABELS_KO.get(code, code),
+        "one_line_ko": SCAN_VERDICT_ONELINE_KO.get(code, ""),
     }
 
 

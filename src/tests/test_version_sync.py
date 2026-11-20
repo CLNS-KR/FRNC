@@ -18,7 +18,7 @@ from franchise_kr.version import (SERVICE_NAME, SERVICE_TAGLINE, SERVICE_TITLE_K
 class VersionSyncTest(unittest.TestCase):
     def test_version_format(self):
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
-        self.assertEqual(__version__, "0.1.1")
+        self.assertEqual(__version__, "0.1.2")
 
     def test_server_json_version(self):
         with open(os.path.join(PROJECT, "server.json"), "r", encoding="utf-8") as handle:
@@ -48,7 +48,7 @@ class VersionSyncTest(unittest.TestCase):
         self.assertIn("FRNC", llms)
         self.assertIn(__version__.replace(".", ".") if False else "FRNC", llms)
         sitemap = static_files.sitemap_xml()
-        self.assertIn("<loc>https://frnc-kr.onrender.com/</loc>", sitemap)
+        self.assertIn("<loc>https://frnc.onrender.com/</loc>", sitemap)
 
     def test_schema_version(self):
         self.assertEqual(models.SCHEMA_VERSION, "1.0")

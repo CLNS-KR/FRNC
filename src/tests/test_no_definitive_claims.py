@@ -58,6 +58,26 @@ def guide_prose(guide) -> str:
     return "\n".join(parts)
 
 
+def scan_prose() -> str:
+    """문구 스캔 규칙·안내 문장 — 계약서 인용이 아니라 우리가 쓴 설명만 모은다."""
+    parts = [engine.SCAN_NOT_A_CLEARANCE_KO, " ".join(models.SCAN_VERDICT_LABELS_KO.values()),
+             " ".join(models.SCAN_VERDICT_ONELINE_KO.values()), " ".join(engine.SCAN_QUESTIONS_KO)]
+    for rule in engine.CONTRACT_RULES:
+        parts += [rule["title_ko"], rule["why_ko"], rule["fix_ko"], rule["ask_ko"]]
+        parts += [entry.get("note_ko", "") for entry in rule["patterns"]]
+    parts.append(" ".join(row["detail_ko"] for row in engine._scan_next_steps()))
+    for payload in (engine.scan_contract_text({"text": "가맹금은 예치기관에 예치한다." * 3}),
+                    engine.scan_contract_text({"text": "해지"})):
+        parts += [payload["summary_ko"], payload["not_a_clearance_ko"],
+                  payload["law_basis_scope_ko"]
+                  if "law_basis" in payload else "",
+                  " ".join(row["result_ko"] for row in payload["checks_ko"])]
+    for definition in api.TOOL_DEFS:
+        if definition["name"] == "scan_contract_text":
+            parts.append(definition["description_ko"])
+    return "\n".join(parts)
+
+
 def service_prose() -> str:
     parts = [models.DISCLAIMER_KO, " ".join(models.SCOPE_LIMITS_KO),
              " ".join(models.VERDICT_ONELINE_KO.values()), guides.DISCLAIMER_KO,
@@ -113,6 +133,15 @@ class NoDefinitiveClaimTest(unittest.TestCase):
         for label in models.VERDICT_LABELS_KO.values():
             self.assertEqual(claim_hits(label), [], label)
         self.assertNotIn("안전", " ".join(models.VERDICT_LABELS_KO.values()))
+
+    def test_scan_prose_has_no_definitive_claim(self):
+        self.assertEqual(claim_hits(scan_prose()), [])
+
+    def test_scan_notice_is_not_a_clearance(self):
+        notice = engine.SCAN_NOT_A_CLEARANCE_KO
+        self.assertTrue(notice.startswith("제시된 패턴에서 잡히지 않았을 뿐"))
+        self.assertTrue(notice.endswith("필요합니다."))
+        self.assertEqual(claim_hits(notice), [])
 
     def test_engine_summary_has_no_definitive_claim(self):
         cases = [
