@@ -1,0 +1,30 @@
+# Render Blueprint — FRNC
+# 프랜차이즈 창업 전 10초 리스크 체크 (웹 UI + JSON API + MCP)
+#
+# 배포
+#   1) 저장소를 Render 에 연결하고 Blueprint(render.yaml)를 선택
+#   2) 배포 후 https://<서비스>.onrender.com/healthz 확인
+#   3) 선택: 공공데이터포털 가맹정보 API 활용신청을 승인받으면
+#      DATA_GO_KR_SERVICE_KEY 를 환경변수로 넣고 재시작 → 브랜드 조회가 실데이터로 바뀝니다.
+#
+# 주의
+#   - 서버는 인증키 없이도 동작합니다(판정은 법령 조문만으로 계산, 브랜드 조회만 샘플).
+#   - free 플랜은 영구 디스크가 없어 카운터·문의가 재배포 시 초기화됩니다.
+#   - free 플랜 미접속 시 슬립되므로 첫 요청이 30~60초 걸릴 수 있습니다.
+services:
+  - type: web
+    name: frnc-kr
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PUBLIC_BASE_URL
+        value: https://frnc-kr.onrender.com
+      - key: FRNC_DB
+        value: /app/data/app.sqlite
+      - key: DATA_GO_KR_SERVICE_KEY
+        sync: false

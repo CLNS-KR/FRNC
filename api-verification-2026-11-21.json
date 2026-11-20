@@ -1,0 +1,446 @@
+{
+ "generated_at": "2026-11-21T01:46:10+09:00",
+ "provider": "공정거래위원회 가맹정보 (data.go.kr 1130000)",
+ "note_ko": "각 데이터셋의 오퍼레이션을 실제 호출해 응답 코드를 기록했습니다. 코드 30 은 오퍼레이션이 존재하지만 이 인증키가 해당 서비스에 등록되지 않았다는 뜻이고, 코드 12 는 오퍼레이션 이름이 존재하지 않는다는 뜻입니다(추측 금지 확인용). 인증키 값은 파일에 남기지 않았습니다.",
+ "counts": {
+  "total": 18,
+  "approved": 0,
+  "not_registered": 17,
+  "unverified": 1,
+  "link_only": 3
+ },
+ "datasets": [
+  {
+   "key": "brand_list",
+   "dataset_id": "15125467",
+   "title_ko": "가맹정보_브랜드 목록 정보",
+   "why_ko": "브랜드명·가맹본부·업종·가맹사업 개시일 — 브랜드 검색의 시작점",
+   "service": "FftcBrandRlsInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandRlsInfo2_Service/getBrandinfo",
+   "operation": "getBrandinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125467/openapi.do",
+   "attempts": [
+    {
+     "operation": "getBrandinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "hq_general",
+   "dataset_id": "15125450",
+   "title_ko": "가맹정보_가맹본부 일반 정보 상세",
+   "why_ko": "본부 업체명·대표자·기업규모·주소·브랜드 수",
+   "service": "FftcJnghdqrtrsGnrlDtl3_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcJnghdqrtrsGnrlDtl3_Service/getjnghdqrtrsGnlinfo2",
+   "operation": "getjnghdqrtrsGnlinfo2",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125450/openapi.do",
+   "attempts": [
+    {
+     "operation": "getjnghdqrtrsGnlinfo2",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_stores",
+   "dataset_id": "15110241",
+   "title_ko": "가맹정보_브랜드별 가맹점 현황(평균매출)",
+   "why_ko": "가맹점 수·신규·계약종료·해지·평균매출 — 폐점률 계산의 핵심",
+   "service": "FftcBrandFrcsStatsService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsStatsService/getBrandFrcsStats",
+   "operation": "getBrandFrcsStats",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15110241/openapi.do",
+   "attempts": [
+    {
+     "operation": "getBrandFrcsStats",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_direct_stores",
+   "dataset_id": "15125490",
+   "title_ko": "가맹정보_브랜드 가맹점 및 직영점정보",
+   "why_ko": "지역별 가맹점·직영점 수",
+   "service": "FftcBrandFrcsDropInfo3_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsDropInfo3_Service/getbrandFrcsDmsstus2",
+   "operation": "getbrandFrcsDmsstus2",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125490/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsDmsstus2",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_store_change",
+   "dataset_id": "15125491",
+   "title_ko": "가맹정보_브랜드 가맹점 변경현황",
+   "why_ko": "연초·신규·계약종료·계약해지·연말 가맹점 수",
+   "service": "FftcBrandFrcsChghst2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsChghst2_Service/getbrandFrcsFlctnstus",
+   "operation": "getbrandFrcsFlctnstus",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125491/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsFlctnstus",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_startup_amount",
+   "dataset_id": "15110265",
+   "title_ko": "가맹정보_브랜드별 창업 금액 현황",
+   "why_ko": "가맹비·보증금·교육비 등 창업 금액 통계",
+   "service": "FftcBrandFntnStatsService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFntnStatsService/getBrandFntnStats",
+   "operation": "getBrandFntnStats",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15110265/openapi.do",
+   "attempts": [
+    {
+     "operation": "getBrandFntnStats",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_interior_cost",
+   "dataset_id": "15125479",
+   "title_ko": "가맹정보_브랜드 가맹점 인테리어 비용정보",
+   "why_ko": "단위면적 인테리어 금액·점포 기준면적",
+   "service": "FftcBrandFrcsIntInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsIntInfo2_Service/getbrandFrcsBzmnIntrrctinfo",
+   "operation": "getbrandFrcsBzmnIntrrctinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125479/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsBzmnIntrrctinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_franchise_fee",
+   "dataset_id": "15125476",
+   "title_ko": "가맹정보_브랜드 가맹점 사업자 가맹금 정보",
+   "why_ko": "가맹금 항목·금액",
+   "service": "FftcbrandfrcsjnntinfoService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcbrandfrcsjnntinfoService/getbrandFrcsJnntinfo",
+   "operation": "getbrandFrcsJnntinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125476/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsJnntinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_burden",
+   "dataset_id": "15125475",
+   "title_ko": "가맹정보_브랜드 가맹점 사업자의 부담금정보",
+   "why_ko": "영업 중 부담금 항목",
+   "service": "FftcBrandFrcsAlotmInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsAlotmInfo2_Service/getbrandFrcsbzmnAlotminfo",
+   "operation": "getbrandFrcsbzmnAlotminfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125475/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsbzmnAlotminfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_fee_deposit",
+   "dataset_id": "15125480",
+   "title_ko": "가맹정보_브랜드 가맹점 사업자의 예치금정보",
+   "why_ko": "예치금액·예치제도 여부 — 가맹금 예치 확인",
+   "service": "FftcBrandFrcsAlotmCtInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsAlotmCtInfo2_Service/getbrandFrcsBzmnDepoinfo",
+   "operation": "getbrandFrcsBzmnDepoinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125480/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsBzmnDepoinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "hq_violation",
+   "dataset_id": "15125463",
+   "title_ko": "가맹정보_가맹본부 법 위반정보",
+   "why_ko": "시정조치·민사소송 패소·형벌선고 건수",
+   "service": "FftcJnghdqrtrsExctvVioltInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcJnghdqrtrsExctvVioltInfo2_Service/getjnghdqrtrsLawVioltinfo",
+   "operation": "getjnghdqrtrsLawVioltinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125463/openapi.do",
+   "attempts": [
+    {
+     "operation": "getjnghdqrtrsLawVioltinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "hq_corrective",
+   "dataset_id": "15125464",
+   "title_ko": "가맹정보_가맹본부 법 위반 시정조치",
+   "why_ko": "시정조치 내역",
+   "service": "FftcjnghdqrtrscorecactninfoService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcjnghdqrtrscorecactninfoService/getjnghdqrtrsCorecActninfo",
+   "operation": "getjnghdqrtrsCorecActninfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125464/openapi.do",
+   "attempts": [
+    {
+     "operation": "getjnghdqrtrsCorecActninfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "hq_penalty",
+   "dataset_id": "15125466",
+   "title_ko": "가맹정보_가맹본부 법 위반 형벌선고",
+   "why_ko": "형벌선고 내역",
+   "service": "FftcjnghdqrtrspetyadjuinfoService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcjnghdqrtrspetyadjuinfoService/getjnghdqrtrsPetyAdjuinfo",
+   "operation": "getjnghdqrtrsPetyAdjuinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125466/openapi.do",
+   "attempts": [
+    {
+     "operation": "getjnghdqrtrsPetyAdjuinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_iprs",
+   "dataset_id": "15125471",
+   "title_ko": "가맹정보_브랜드 지식재산권",
+   "why_ko": "상표 출원·등록 — 영업표지 권리 확인",
+   "service": "FftcbrandiprsinfoService",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcbrandiprsinfoService/getbrandIprsinfo",
+   "operation": "getbrandIprsinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125471/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandIprsinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_store_period",
+   "dataset_id": "15125484",
+   "title_ko": "가맹정보_브랜드 가맹점 사업자 가맹기간",
+   "why_ko": "최초·연장 계약년수, 권장 종업원 수",
+   "service": "FftcBrandFrcsStrtInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsStrtInfo2_Service/getbrandFrcsPdinfo",
+   "operation": "getbrandFrcsPdinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125484/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsPdinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_compare",
+   "dataset_id": "15125517",
+   "title_ko": "가맹정보_브랜드 비교 목록",
+   "why_ko": "브랜드 간 비교용 요약",
+   "service": "FftcBrandCompInfo2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcBrandCompInfo2_Service/getbrandCompListinfo",
+   "operation": "getbrandCompListinfo",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125517/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandCompListinfo",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "hq_history",
+   "dataset_id": "15125452",
+   "title_ko": "가맹정보_가맹본부 일반 정보 변경 이력",
+   "why_ko": "본부 정보 변경 이력",
+   "service": "FftcjnghdqrtrsInfoChghst2_Service",
+   "endpoint": "https://apis.data.go.kr/1130000/FftcjnghdqrtrsInfoChghst2_Service/getjnghdqrtrsGnlHist",
+   "operation": "getjnghdqrtrsGnlHist",
+   "approval": "not_registered",
+   "code": "30",
+   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "apply_url": "https://www.data.go.kr/data/15125452/openapi.do",
+   "attempts": [
+    {
+     "operation": "getjnghdqrtrsGnlHist",
+     "http_status": 403,
+     "code": "30",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+    }
+   ]
+  },
+  {
+   "key": "brand_unit_sales",
+   "dataset_id": "15125494",
+   "title_ko": "가맹정보_브랜드 가맹점 단위면적당 평균 매출",
+   "why_ko": "면적당 매출 — 임차료 대비 손익 판단",
+   "service": "FftcBrandFrcsUnitAvrSalInfo3_Service",
+   "endpoint": null,
+   "operation": null,
+   "approval": "unverified",
+   "code": "12",
+   "code_hint_ko": "해당 오퍼레이션 없음(서비스명·오퍼레이션 확인 필요)",
+   "apply_url": "https://www.data.go.kr/data/15125494/openapi.do",
+   "attempts": [
+    {
+     "operation": "getbrandFrcsBzmnAvrgsalinfo",
+     "http_status": 400,
+     "code": "12",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"NO_OPENAPI_SERVICE_ERROR\", \"returnAuthMsg\": \"해당 오픈API 서비스가 없거나 폐기됨\", \"returnReasonCode\": \"12\" } } }"
+    },
+    {
+     "operation": "getBrandFrcsBzmnAvrgsalinfo",
+     "http_status": 400,
+     "code": "12",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"NO_OPENAPI_SERVICE_ERROR\", \"returnAuthMsg\": \"해당 오픈API 서비스가 없거나 폐기됨\", \"returnReasonCode\": \"12\" } } }"
+    },
+    {
+     "operation": "getbrandFrcsBzmnAvrgs",
+     "http_status": 400,
+     "code": "12",
+     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"NO_OPENAPI_SERVICE_ERROR\", \"returnAuthMsg\": \"해당 오픈API 서비스가 없거나 폐기됨\", \"returnReasonCode\": \"12\" } } }"
+    }
+   ]
+  }
+ ],
+ "link_only": [
+  {
+   "key": "disclosure_list",
+   "dataset_id": "15125569",
+   "title_ko": "가맹정보_정보공개서_목록_조회",
+   "note_ko": "정보공개서 목록 — data.go.kr 제공형태 LINK(문서 열람). REST 호출 주소 없음.",
+   "apply_url": "https://www.data.go.kr/data/15125569/openapi.do"
+  },
+  {
+   "key": "disclosure_toc",
+   "dataset_id": "15125570",
+   "title_ko": "가맹정보_정보공개서_목차_조회",
+   "note_ko": "정보공개서 목차 — 제공형태 LINK.",
+   "apply_url": "https://www.data.go.kr/data/15125570/openapi.do"
+  },
+  {
+   "key": "disclosure_body",
+   "dataset_id": "15125571",
+   "title_ko": "가맹정보_정보공개서_본문_조회",
+   "note_ko": "정보공개서 본문 — 제공형태 LINK. 검증 시점에 REST 오퍼레이션 주소가 공개되어 있지 않았고, 본문은 가맹사업정보제공시스템(franchise.ftc.go.kr)에서 열람하는 문서입니다.",
+   "apply_url": "https://www.data.go.kr/data/15125571/openapi.do"
+  }
+ ],
+ "apply_urls": [
+  "https://www.data.go.kr/data/15110241/openapi.do",
+  "https://www.data.go.kr/data/15110265/openapi.do",
+  "https://www.data.go.kr/data/15125450/openapi.do",
+  "https://www.data.go.kr/data/15125452/openapi.do",
+  "https://www.data.go.kr/data/15125463/openapi.do",
+  "https://www.data.go.kr/data/15125464/openapi.do",
+  "https://www.data.go.kr/data/15125466/openapi.do",
+  "https://www.data.go.kr/data/15125467/openapi.do",
+  "https://www.data.go.kr/data/15125471/openapi.do",
+  "https://www.data.go.kr/data/15125475/openapi.do",
+  "https://www.data.go.kr/data/15125476/openapi.do",
+  "https://www.data.go.kr/data/15125479/openapi.do",
+  "https://www.data.go.kr/data/15125480/openapi.do",
+  "https://www.data.go.kr/data/15125484/openapi.do",
+  "https://www.data.go.kr/data/15125490/openapi.do",
+  "https://www.data.go.kr/data/15125491/openapi.do",
+  "https://www.data.go.kr/data/15125517/openapi.do"
+ ]
+}
