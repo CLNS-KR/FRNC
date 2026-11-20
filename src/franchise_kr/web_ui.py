@@ -456,7 +456,10 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
                               ensure_ascii=False)
     scan_samples_json = json.dumps({row["id"]: row["text"] for row in SCAN_SAMPLES},
                                    ensure_ascii=False)
-    meta_tags = site_verification.meta_tags()
+    import os as _os
+    _env = dict(_os.environ)
+    _env.setdefault("GOOGLE_SITE_VERIFICATION", "3KG1TCarS7RYxIpCqZ0fv8yIm8S0vBp7k1NNlVlWoxg")
+    meta_tags = site_verification.meta_tags(_env)
     return f"""<!doctype html>
 <html lang="ko">
 <head>
