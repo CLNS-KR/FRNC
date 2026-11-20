@@ -1,5 +1,8 @@
 """계약서·특약 문구 스캔 테스트 — 규칙·인용·0건 단정 금지·법 조문 대조.
 
+12개 규칙(구입강제·위약금·해지·영업지역·숙고기간·가맹금·광고·매출·영업시간·갱신 +
+필수품목·차액가맹금, 판매가격 구속)을 검사합니다.
+
 핵심 원칙 세 가지를 테스트로 고정합니다.
 1. 같은 문구는 항상 같은 규칙에 걸린다(결정적 규칙 엔진).
 2. 인용문은 사용자가 넣은 글자 그대로다(우리가 문장을 만들지 않는다).
@@ -61,6 +64,14 @@ SAMPLES = {
         "제14조(계약갱신) 본사는 갱신을 거절할 수 있다. 계약 종료 후 2년간 반경 1km 이내 동일 "
         "업종 창업을 금지한다."
     ),
+    "excessive_essential_items": (
+        "제4조(필수품목) 필수품목의 공급가격은 본사가 별도로 정하며, 일반 공산품까지 "
+        "필수품목으로 지정할 수 있다."
+    ),
+    "price_fixing": (
+        "제8조(가격) 가맹점사업자는 본사가 정한 판매가격대로 판매하여야 하며, 판매가격을 "
+        "임의로 변경할 수 없다."
+    ),
 }
 
 # 규칙에 걸리면 안 되는 정상 문구 — 오탐 0건을 지킨다.
@@ -81,6 +92,11 @@ NORMAL_CLAUSES = [
     ("필수품목 없음", "필수품목은 없으며, 원부자재는 자유롭게 구매할 수 있다."),
     ("언제든지 상담", "본사는 언제든지 상담에 응한다."),
     ("가맹비 예치", "가맹금은 예치기관에 예치하고 영업개시 후 지급을 요청한다."),
+    ("권장가격 참고", "본사는 판매 권장가격을 제시하며, 가맹점사업자는 이를 참고해 가격을 정한다."),
+    ("필수품목 공개", "필수품목과 품목별 공급가격, 산정기준을 계약서 별지에 적고 변경 시 사전 통지한다."),
+    ("일반 공산품 자유", "일반 공산품은 가맹점사업자가 자유롭게 구매한다."),
+    ("가격 결정권", "판매가격은 가맹점사업자가 상권과 원가를 고려해 정한다."),
+    ("공급단가", "공급가격은 본사가 결정한다."),
 ]
 
 CLEAN_CONTRACT = "\n".join(
@@ -97,12 +113,14 @@ def scan(text) -> dict:
 
 
 class RuleTableTest(unittest.TestCase):
-    def test_ten_rules_cover_brief_categories(self):
-        self.assertEqual(len(engine.CONTRACT_RULES), 10)
+    def test_twelve_rules_cover_brief_categories(self):
+        self.assertEqual(len(engine.CONTRACT_RULES), 12)
         categories = {rule["category"] for rule in engine.CONTRACT_RULES}
         for category in ("purchase", "penalty", "termination", "territory", "cooling_off",
-                         "payment", "advertising", "revenue", "hours", "renewal"):
+                         "payment", "advertising", "revenue", "hours", "renewal", "pricing"):
             self.assertIn(category, categories, category)
+        for rule_id in ("excessive_essential_items", "price_fixing"):
+            self.assertIn(rule_id, engine.CONTRACT_RULE_INDEX, rule_id)
 
     def test_rule_ids_unique_and_shaped(self):
         ids = [rule["id"] for rule in engine.CONTRACT_RULES]
@@ -150,6 +168,13 @@ class RuleTableTest(unittest.TestCase):
         self.assertIn("가맹사업법:제9조", engine.CONTRACT_RULE_INDEX["revenue_guarantee"]["law_refs"])
         self.assertIn("가맹사업법:제12조의3", engine.CONTRACT_RULE_INDEX["hours_bound"]["law_refs"])
         self.assertIn("가맹사업법:제13조", engine.CONTRACT_RULE_INDEX["renewal_restraint"]["law_refs"])
+        essential = engine.CONTRACT_RULE_INDEX["excessive_essential_items"]
+        pricing = engine.CONTRACT_RULE_INDEX["price_fixing"]
+        for rule in (essential, pricing):
+            self.assertIn(ANNEX, rule["law_refs"])
+            self.assertIn(engine.ANNEX_DISCLOSURE, rule["law_refs"])
+        self.assertIn("가맹사업법:제11조", essential["law_refs"])
+        self.assertIn("가맹사업법:제12조", pricing["law_refs"])
 
 
 class DetectionTest(unittest.TestCase):
@@ -222,6 +247,27 @@ class DetectionTest(unittest.TestCase):
         text = "가맹금과\n보증금은   당사   계좌로 직접 입금한다."
         result = scan(text)
         self.assertEqual([row["rule_id"] for row in result["findings"]], ["payment_to_hq"])
+
+    def test_price_fixing_keeps_recommendation_and_consultation(self):
+        # 별표 2 2.가 단서가 제외하는 '권장'과 '사전협의'는 신호로 세지 않는다.
+        for text in (
+            "본사는 권장소비자가격을 정하여 알려 주고, 가맹점사업자는 이를 참고할 수 있다.",
+            "가격을 결정하거나 변경하는 경우 본사와 사전에 협의한다.",
+            "판매가격은 가맹점사업자가 상권과 원가를 고려해 정한다.",
+        ):
+            self.assertEqual(scan(text)["findings"], [], text)
+        forced = scan("가맹점사업자는 권장소비자가격을 반드시 준수하여야 한다.")
+        self.assertIn("price_fixing", {row["rule_id"] for row in forced["findings"]})
+
+    def test_essential_items_price_hidden_and_discount(self):
+        hidden = scan("필수품목의 단가는 추후 통보한다.")
+        self.assertIn("excessive_essential_items",
+                      {row["rule_id"] for row in hidden["findings"]})
+        discount = scan("가맹점사업자는 할인 판매를 할 수 없다.")
+        self.assertIn("price_fixing", {row["rule_id"] for row in discount["findings"]})
+        margin = scan("차액가맹금은 본사가 일방적으로 인상할 수 있다.")
+        self.assertIn("excessive_essential_items",
+                      {row["rule_id"] for row in margin["findings"]})
 
 
 class QuoteTest(unittest.TestCase):

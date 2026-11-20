@@ -1,4 +1,4 @@
-"""함정 코퍼스 검사 — 15건·조문 대조·판정 함수 누락 없음."""
+"""함정 코퍼스 검사 — 17건·조문 대조·판정 함수 누락 없음."""
 from __future__ import annotations
 
 import os
@@ -18,8 +18,8 @@ class TrapCorpusTest(unittest.TestCase):
 
     def test_case_count_is_within_brief_range(self):
         self.assertGreaterEqual(len(self.cases), 10)
-        self.assertLessEqual(len(self.cases), 15)
-        self.assertEqual(len(self.cases), 15)
+        self.assertLessEqual(len(self.cases), 17)
+        self.assertEqual(len(self.cases), 17)
 
     def test_ids_are_unique(self):
         ids = [case["id"] for case in self.cases]
@@ -62,12 +62,12 @@ class TrapCorpusTest(unittest.TestCase):
         by_id = {case["id"]: case for case in self.cases}
         for trap_id in ("same_day_contract", "revenue_verbal_guarantee",
                         "payment_to_hq_account", "interior_forced", "no_territory",
-                        "closure_rate_hidden"):
+                        "closure_rate_hidden", "essential_items_margin"):
             self.assertEqual(by_id[trap_id]["severity"], models.SEVERITY_HIGH, trap_id)
 
     def test_list_risk_cases_reports_verification(self):
         payload = engine.list_risk_cases()
-        self.assertEqual(payload["count"], 15)
+        self.assertEqual(payload["count"], 17)
         for case in payload["cases"]:
             self.assertTrue(case["law_verified"], case["trap_id"])
             self.assertTrue(case["severity_label_ko"])
@@ -79,6 +79,35 @@ class TrapCorpusTest(unittest.TestCase):
             text = " ".join([case["why_ko"], case["summary_ko"], case["fix_ko"]])
             for word in banned:
                 self.assertNotIn(word, text, case["id"])
+
+    def test_new_cases_trigger_and_clear_on_their_fields(self):
+        flagged = engine.check_franchise_risk({
+            "brand_name": "A", "essential_price_hidden": True,
+            "essential_items_broad": True, "margin_raise_unilateral": True,
+            "resale_price_bound": True, "discount_forbidden": True,
+        })
+        ids = [row["trap_id"] for row in flagged["risk_points"]]
+        for trap_id in ("essential_items_margin", "resale_price_maintenance"):
+            self.assertIn(trap_id, ids)
+        cleared = engine.check_franchise_risk({
+            "brand_name": "A", "essential_price_hidden": False,
+            "essential_items_broad": False, "margin_raise_unilateral": False,
+            "resale_price_bound": False, "discount_forbidden": False,
+        })
+        clear_ids = [row["trap_id"] for row in cleared["clear_points"]]
+        for trap_id in ("essential_items_margin", "resale_price_maintenance"):
+            self.assertIn(trap_id, clear_ids)
+
+    def test_cited_annexes_are_part_of_the_verified_file(self):
+        for case_id in ("essential_items_margin", "resale_price_maintenance"):
+            case = next(row for row in self.cases if row["id"] == case_id)
+            keys = case["law_refs"]
+            self.assertTrue(any("정보공개서의 기재사항" in key for key in keys), case_id)
+            self.assertTrue(any("불공정거래행위" in key for key in keys), case_id)
+            for key, anchor in (case.get("law_excerpt_anchors") or {}).items():
+                record = engine.law_record(key)
+                self.assertIsNotNone(record, key)
+                self.assertIn(anchor, engine.law_full_text(record), f"{case_id}: {anchor}")
 
 
 if __name__ == "__main__":

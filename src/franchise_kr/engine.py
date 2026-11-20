@@ -9,7 +9,7 @@
 3. **근거를 붙인다**: 위험 신호마다 법제처 OPEN API 로 받은 가맹사업법·시행령 조문을
    `law-verification.json` 에서 찾아 인용한다. 조문 키가 없으면 판정을 만들지 않는다(테스트로 강제).
 
-함정 코퍼스는 `traps.json`(15건)에 있고, 각 케이스의 판정 함수는 이 파일 아래
+함정 코퍼스는 `traps.json`(17건)에 있고, 각 케이스의 판정 함수는 이 파일 아래
 `EVALUATORS` 에 1:1로 대응한다.
 
 계약서·특약 문구 스캔(`scan_contract_text`)도 같은 원칙을 따른다. 규칙(`CONTRACT_RULES`)은
@@ -76,6 +76,15 @@ FIELD_ALIASES: Dict[str, str] = {
     "mandatory_purchase": "mandatory_purchase", "필수품목": "mandatory_purchase",
     "sales_target": "sales_target", "판매목표": "sales_target",
     "price_fixing": "price_fixing", "가격구속": "price_fixing",
+    "essential_price_hidden": "essential_price_hidden",
+    "필수품목단가미공개": "essential_price_hidden", "필수품목가격미공개": "essential_price_hidden",
+    "essential_items_broad": "essential_items_broad", "필수품목과다": "essential_items_broad",
+    "필수품목범위과다": "essential_items_broad", "일반공산품필수품목": "essential_items_broad",
+    "margin_raise_unilateral": "margin_raise_unilateral",
+    "차액가맹금일방인상": "margin_raise_unilateral", "차액가맹금인상": "margin_raise_unilateral",
+    "resale_price_bound": "resale_price_bound", "재판매가격유지": "resale_price_bound",
+    "판매가격구속": "resale_price_bound", "가격유지강요": "resale_price_bound",
+    "discount_forbidden": "discount_forbidden", "할인금지": "discount_forbidden",
     "ad_cost_burden": "ad_cost_burden", "광고비부담": "ad_cost_burden",
     "territory": "territory", "영업지역": "territory",
     "renewal_years": "renewal_years", "갱신년수": "renewal_years",
@@ -105,6 +114,8 @@ BOOL_FIELDS = (
     "advisor_reviewed", "revenue_written", "revenue_estimate_doc", "supplier_designated",
     "mandatory_purchase", "sales_target", "price_fixing", "renewal_refused",
     "legal_violation", "disclosure_registered",
+    "essential_price_hidden", "essential_items_broad", "margin_raise_unilateral",
+    "resale_price_bound", "discount_forbidden",
 )
 ENUM_FIELDS = {
     "payment_route": ("escrow", "insurance", "hq_account", "none", "unknown"),
@@ -550,6 +561,33 @@ def _ev_price(terms: Dict[str, Any]) -> Dict[str, Any]:
     return _result("unknown")
 
 
+def _ev_essential_margin(terms: Dict[str, Any]) -> Dict[str, Any]:
+    """필수품목 단가 미공개·과다 지정·차액가맹금 일방 인상."""
+    hidden = terms.get("essential_price_hidden")
+    broad = terms.get("essential_items_broad")
+    raised = terms.get("margin_raise_unilateral")
+    if hidden is True or broad is True or raised is True:
+        note = ("필수품목 단가·산정기준 미공개" if hidden else
+                "필수품목 범위 과다(일반 공산품 포함)" if broad else
+                "차액가맹금 일방 인상")
+        return _result("triggered", models.SEVERITY_HIGH, note)
+    if hidden is False and broad is False and raised is False:
+        return _result("clear", note_ko="필수품목 단가·범위·인상 절차 확인")
+    return _result("unknown")
+
+
+def _ev_resale_price(terms: Dict[str, Any]) -> Dict[str, Any]:
+    """재판매가격 유지·할인 금지."""
+    bound = terms.get("resale_price_bound")
+    discount = terms.get("discount_forbidden")
+    if bound is True or discount is True:
+        note = "판매가격 유지·변경 제한" if bound else "할인 금지"
+        return _result("triggered", models.SEVERITY_MEDIUM, note)
+    if bound is False and discount is False:
+        return _result("clear", note_ko="가격·할인 결정권 확인")
+    return _result("unknown")
+
+
 def _ev_ad(terms: Dict[str, Any]) -> Dict[str, Any]:
     value = terms.get("ad_cost_burden")
     if value == "franchisee_forced":
@@ -601,6 +639,8 @@ EVALUATORS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "excessive_penalty": _ev_penalty,
     "mandatory_purchase": _ev_purchase,
     "price_fixing": _ev_price,
+    "essential_items_margin": _ev_essential_margin,
+    "resale_price_maintenance": _ev_resale_price,
     "ad_cost": _ev_ad,
     "renewal_terms": _ev_renewal,
     "termination_no_grace": _ev_termination,
@@ -1147,7 +1187,7 @@ def now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# 계약서·특약 문구 스캔 (0.1.2)
+# 계약서·특약 문구 스캔 (0.1.2 → 0.1.3)
 # ---------------------------------------------------------------------------
 # 왜 규칙 엔진인가: 같은 문구는 언제 넣어도 같은 결과가 나와야 하고(결정적), 어떤 문구를
 # 어떤 조문과 대조했는지 사용자가 직접 확인할 수 있어야 하기 때문이다. 여기서 하는 일은
@@ -1157,6 +1197,7 @@ def now_iso() -> str:
 # 대신 인용문은 원문 위치로 되돌려 잘라 내므로, 화면에 보이는 인용은 사용자가 넣은 글자
 # 그대로다 — 우리가 문장을 만들어 내지 않는다.
 ANNEX_UNFAIR = "가맹사업법 시행령:불공정거래행위의 유형 또는 기준(제13조제1항관련)"
+ANNEX_DISCLOSURE = "가맹사업법 시행령:정보공개서의 기재사항(제4조제1항 관련)"
 
 SCAN_MAX_CHARS = 20_000
 SCAN_MIN_CHARS = 8
@@ -1528,6 +1569,113 @@ CONTRACT_RULES: List[Dict[str, Any]] = [
                "갱신 요구 자체를 막는 문구입니다.", models.SEVERITY_HIGH),
             _p(r"(전체)?계약기간(을)?(10|십)년(초과|이상)",
                "갱신 요구권 10년 한도를 넘기는 문구입니다."),
+        ],
+    },
+    {
+        "id": "excessive_essential_items",
+        "title_ko": "필수품목 과다 지정·단가 미공개·차액가맹금 일방 인상",
+        "category": "purchase",
+        "severity": models.SEVERITY_HIGH,
+        "why_ko": (
+            "필수품목 목록만 길고 품목별 공급가격·산정기준이 없으면, 점주는 단가를 비교할 기준 "
+            "없이 본부가 부르는 값에 사게 됩니다. 법은 본부가 거래를 강제하는 품목의 종류와 "
+            "공급 가격 산정방식을 가맹계약서에 적게 하고(법 제11조②12), 정보공개서에는 "
+            "필수품목 구입대금 추정액의 상·하한과 차액가맹금(적정한 도매가격을 넘는 대가) "
+            "지급액·매출 대비 비율, 품목별 차액가맹금 수취 여부와 주요 품목 공급가격의 "
+            "상·하한을 적게 합니다(시행령 별표 1 5.나·6.가). 경영과 무관하거나 필요한 양을 "
+            "넘는 물품을 사게 하는 행위는 구입강제로, 특정 거래상대방과의 거래를 강제하는 "
+            "행위는 정해진 요건을 갖추지 못하면 거래상대방 구속으로 봅니다"
+            "(시행령 별표 2 2.나·3.가)."
+        ),
+        "fix_ko": (
+            "‘필수품목은 품목·수량·공급가격(또는 산정기준)·변경 절차를 별지에 적고, 가격을 "
+            "올릴 때는 사전 서면 통지와 협의를 거친다. 가맹사업에 필요하지 않은 일반 공산품은 "
+            "가맹점사업자가 자유롭게 구매한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "필수품목 목록과 품목별 공급가격·산정기준을 서면으로 받았나요? 차액가맹금이 붙는 "
+            "품목은 무엇이고, 최근 가격 인상은 언제·얼마였나요?"
+        ),
+        "law_refs": ["가맹사업법:제11조", "가맹사업법:제12조", ANNEX_UNFAIR, ANNEX_DISCLOSURE],
+        "anchors": {
+            "가맹사업법:제11조": "공급 가격 산정방식",
+            "가맹사업법:제12조": "부당하게 구속하거나 제한",
+            ANNEX_UNFAIR: "나. 거래상대방의 구속",
+            ANNEX_DISCLOSURE: "차액가맹금",
+        },
+        "patterns": [
+            _p(r"(필수품목|필수물품|지정품목|공급품목)[^.]{0,24}(가격|단가|가격표|산정기준)"
+               r"(은|는|을|를|이|가)?(별도|추후|협의하여|협의로|고지|통보|정한다|변경할수있"
+               r"|미정|미공개|비공개|공개하지않)",
+               "필수품목 가격·산정기준을 나중에 정하거나 알려 주기만 하겠다는 문구입니다."),
+            _p(r"(필수품목|지정품목)[^.]{0,40}(일반|시중|마트|온라인|인터넷)[^.]{0,10}"
+               r"(공산품|생필품|소모품|잡화)",
+               "필수품목에 일반 공산품까지 묶는 문구입니다."),
+            _p(r"(일반|시중|마트|온라인)[^.]{0,10}(공산품|생필품|소모품|잡화)[^.]{0,14}"
+               r"(필수품목|지정품목|본사지정)",
+               "일반 공산품을 필수품목으로 지정하는 문구입니다."),
+            _p(r"(차액|마진|리베이트)[^.]{0,12}(가맹금)?[^.]{0,10}"
+               r"(일방|임의|사전협의없이|사전통보없이|통보만)(으로)?[^.]{0,10}"
+               r"(인상|변경|조정|수취|공제)",
+               "차액·마진을 본부가 일방적으로 올리거나 조정하는 문구입니다."),
+            _p(r"(공급가격|납품가격|공급단가|단가)(은|는|을|를)?(본사|당사|회사)(가|의)?"
+               r"[^.]{0,12}(일방|임의|사전통보없이|사전협의없이)(으로)?[^.]{0,10}"
+               r"(인상|변경|조정)",
+               "공급단가를 본부가 일방적으로 바꾸는 문구입니다.", models.SEVERITY_MEDIUM),
+        ],
+    },
+    {
+        "id": "price_fixing",
+        "title_ko": "판매가격 구속·재판매가격 유지 강요",
+        "category": "pricing",
+        "severity": models.SEVERITY_MEDIUM,
+        "why_ko": (
+            "본부가 판매가격을 정해 그 가격을 유지하도록 하거나 점주의 가격 결정을 부당하게 "
+            "구속하는 행위는 구속조건부 거래(가격의 구속)로 봅니다(법 제12조①2, 시행령 별표 2 "
+            "2.가). 같은 목은 판매가격을 정해 따르도록 권장하는 행위와, 가격을 결정·변경할 때 "
+            "사전에 협의하도록 하는 행위는 제외하되, 사전협의를 통해 판매가격을 강요하는 "
+            "행위는 다시 가격 구속으로 봅니다. 본부가 두는 가격 제한은 정보공개서에도 적어야 "
+            "합니다(시행령 별표 1 6.라.3)."
+        ),
+        "fix_ko": (
+            "‘판매가격은 가맹점사업자가 상권과 원가를 고려해 정하고, 본부는 권장가격을 "
+            "참고자료로 제시한다. 할인과 가격 변경은 점주가 정한다’로 바꿔 달라고 요청하세요."
+        ),
+        "ask_ko": (
+            "가격을 점주가 바꿀 수 있나요? 할인·가격 변경 때 본부 승인이나 사전협의가 필요한가요? "
+            "그 조건이 정보공개서에도 적혀 있나요?"
+        ),
+        "law_refs": ["가맹사업법:제12조", "가맹사업법 시행령:제13조", ANNEX_UNFAIR,
+                     ANNEX_DISCLOSURE],
+        "anchors": {
+            "가맹사업법:제12조": "부당하게 구속하거나 제한",
+            "가맹사업법 시행령:제13조": "별표 2와 같다",
+            ANNEX_UNFAIR: "가. 가격의 구속",
+            ANNEX_DISCLOSURE: "가격을 정하여 이에 따르도록 권장",
+        },
+        "patterns": [
+            _p(r"(본사|당사|회사)(가|는)?(정한|지정한|결정한|제시한)[^.]{0,10}(판매)?"
+               r"(?<!공급)(?<!납품)(?<!도매)(가격)(대로|에따라|으로)[^.]{0,6}(판매|청구|결제)",
+               "본부가 정한 가격대로 판매하게 하는 문구입니다."),
+            _p(r"(판매가격|판매가|가격)(을|를)?(본사|당사)(가)?(정한|지정한|결정한)"
+               r"[^.]{0,6}(유지|준수)(하도록|하여야|해야|한다)",
+               "본부가 정한 판매가격을 유지·준수하게 하는 문구입니다."),
+            _p(r"(판매가격|판매가|(?<!공급)(?<!납품)(?<!도매)가격)(을|를)?(임의로|마음대로|자유롭게|제멋대로)"
+               r"(변경|인하|할인|조정|올리|내리)(할수없|금지|불가|하지못)",
+               "판매가격 변경·할인을 막는 문구입니다."),
+            _p(r"(할인|할인판매|할인행사|가격할인|프로모션)[^.]{0,8}(금지|불허|할수없|불가|제한)",
+               "할인 판매를 금지·제한하는 문구입니다."),
+            _p(r"(권장소비자가|권장가격|권장가)(격)?(을|를)?(반드시|의무적으로|필히)"
+               r"(준수|따라야|유지)(하여야|해야|한다)",
+               "권장가격을 의무로 지키게 하는 문구입니다."),
+            _p(r"(판매가격|가격|판매가)(을|를)?(지키지않|위반|어길)[^.]{0,16}"
+               r"(해지|위약금|공급중단|계약종료|페널티|패널티)",
+               "판매가격을 지키지 않으면 제재한다는 문구입니다."),
+            _p(r"(판매가격|판매가|(?<!공급)(?<!납품)(?<!도매)가격)(을|를)?(본사|당사)(가)?(일방|사전통보없이|사전협의없이)"
+               r"(으로)?(인상|변경|조정)(한다|할수있다)",
+               "판매가격을 본부가 일방적으로 바꾸는 문구입니다."),
+            _p(r"(판매가격|(?<!공급)(?<!납품)(?<!도매)가격)(을|를)?(본사|당사|회사)(가)?(정한다|결정한다|지정한다)",
+               "판매가격 결정권을 본부가 갖는 문구입니다."),
         ],
     },
 ]

@@ -100,7 +100,7 @@ class ToolRegistryTest(unittest.TestCase):
         self.assertEqual(payload["meta"]["service"], "FRNC")
         self.assertEqual(len(payload["verdicts"]), 3)
         self.assertEqual(len(payload["key_axes"]), 8)
-        self.assertEqual(payload["trap_cases"], 15)
+        self.assertEqual(payload["trap_cases"], 17)
         self.assertFalse(payload["meta"]["privacy"]["stores_inputs"])
         self.assertTrue(payload["data_sources"]["apply_urls"])
 
@@ -109,8 +109,8 @@ class ToolRegistryTest(unittest.TestCase):
         payload = api.call_tool("get_service_meta", {})["result"]
         block = payload["guides"]
         self.assertEqual(block["index"], "/guides/")
-        self.assertEqual(block["count"], 15)
-        self.assertEqual(len(block["items"]), 15)
+        self.assertEqual(block["count"], 17)
+        self.assertEqual(len(block["items"]), 17)
         self.assertEqual([row["slug"] for row in block["items"]], guides.slugs())
         for row in block["items"]:
             self.assertEqual(row["path"], f"/guides/{row['slug']}")

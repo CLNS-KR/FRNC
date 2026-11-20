@@ -74,8 +74,8 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["service"], "frnc")
-        self.assertEqual(payload["trap_cases"], 15)
-        self.assertEqual(payload["guides"], 15)
+        self.assertEqual(payload["trap_cases"], 17)
+        self.assertEqual(payload["guides"], 17)
         self.assertGreaterEqual(payload["law_articles"], 130)
         self.assertIn("approval", payload["live_api"])
         self.assertNotIn("serviceKey", body)
@@ -165,7 +165,7 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(payload["verdict"]["code"], "scan_flagged")
         self.assertTrue(payload["findings"])
         self.assertIn("필요합니다", payload["not_a_clearance_ko"])
-        self.assertEqual(payload["meta"]["version"], "0.1.2")
+        self.assertEqual(payload["meta"]["version"], "0.1.3")
 
         status, body = self.post("/v1/tools/scan_contract_text", {
             "text": "가맹금은 예치기관에 예치한다. 본부는 2개월 이상의 유예기간을 둔다."})

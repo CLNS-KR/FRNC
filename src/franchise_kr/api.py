@@ -6,7 +6,7 @@
 | `scan_contract_text` | 계약서·특약 문구 → 확인이 필요한 문구·근거 조문·수정 요청 문구 |
 | `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(공정위 API 실시간 또는 내장 샘플) |
 | `compare_franchise_terms` | 두 프랜차이즈(또는 두 제안 조건) 비교 |
-| `list_risk_cases` | 함정 코퍼스 15건 목록(조문 대조 여부 포함) |
+| `list_risk_cases` | 함정 코퍼스 17건 목록(조문 대조 여부 포함) |
 | `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
 | `get_service_meta` | 판정 등급·축·법령·실시간 API 승인 상태·개인정보 설계 |
 
@@ -287,7 +287,8 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "description_ko": (
             "브랜드·업종·가맹비·인테리어 비용과 본부가 제시한 조건(정보공개서 수령 후 경과일, "
             "예상매출 서면 교부, 가맹금 예치·납부 방식, 인테리어 지정, 영업지역, 폐점률, "
-            "법 위반 이력 등)을 받아 위험 신호·확인 체크리스트·가맹사업법 조문 근거를 돌려줍니다. "
+            "법 위반 이력, 필수품목 단가 공개 여부, 판매가격·할인 구속 여부 등)을 받아 "
+            "위험 신호·확인 체크리스트·가맹사업법 조문 근거를 돌려줍니다. "
             "판정은 `check_likely`(확인 필요 신호 있음) / `info_needed`(정보 부족) / "
             "`low_risk`(뚜렷한 위험 신호 없음) 세 가지이며 확정 판정이 아닙니다. "
             "입력하지 않은 항목은 '모름'으로 두고 `questions_ko` 로 되물어봅니다. "
@@ -339,8 +340,27 @@ TOOL_DEFS: List[Dict[str, Any]] = [
                 },
                 "supplier_designated": {"type": "boolean", "description": "거래처(물품 공급처) 지정 여부"},
                 "mandatory_purchase": {"type": "boolean", "description": "필수품목 구입 의무 여부"},
+                "essential_price_hidden": {
+                    "type": "boolean",
+                    "description": "필수품목 품목별 공급가격·산정기준을 알려주지 않았는지",
+                },
+                "essential_items_broad": {
+                    "type": "boolean",
+                    "description": "가맹사업과 무관한 일반 공산품까지 필수품목으로 지정했는지",
+                },
+                "margin_raise_unilateral": {
+                    "type": "boolean",
+                    "description": "차액가맹금(적정 도매가격을 넘는 대가)을 일방적으로 올렸는지",
+                },
                 "sales_target": {"type": "boolean", "description": "판매목표 강제 여부"},
                 "price_fixing": {"type": "boolean", "description": "본부가 판매가격을 정하고 지키게 하는지"},
+                "resale_price_bound": {
+                    "type": "boolean",
+                    "description": "본부가 정한 판매가격을 유지·준수하게 하는지(재판매가격 구속)",
+                },
+                "discount_forbidden": {
+                    "type": "boolean", "description": "할인 판매를 금지·제한하는지"
+                },
                 "ad_cost_burden": {
                     "type": "string",
                     "enum": list(engine.ENUM_FIELDS["ad_cost_burden"]),
@@ -378,7 +398,8 @@ TOOL_DEFS: List[Dict[str, Any]] = [
             "가맹계약서·특약·본부 안내 문구를 텍스트로 받아, 가맹사업법·시행령 별표 2의 "
             "불공정 유형(구입강제·지정업체 강제, 과중 위약금, 최고 없는 즉시 해지, 영업지역 침해, "
             "숙고기간 포기, 가맹금 본사 직접 수령, 광고·판촉비 일방 부담, 매출 보장, 영업시간 구속, "
-            "과도한 경업금지·갱신 거절)과 대조해 **확인이 필요한 문구만** 짚어 줍니다. "
+            "과도한 경업금지·갱신 거절, 필수품목 단가 미공개·차액가맹금 일방 인상, 판매가격 구속·"
+            "재판매가격 유지 강요)과 대조해 **확인이 필요한 문구만** 짚어 줍니다. "
             "각 항목에 매칭된 원문 인용, 위험 등급, 실조회 법 조문, 왜 위험한지, 본부에 요청할 "
             "수정 문구 예시가 붙습니다. 결론은 `scan_flagged`(확인 필요 문구 있음) / "
             "`scan_no_match`(제시된 패턴에서 잡힌 문구 없음) / `scan_text_needed`(문구 부족) 세 "
@@ -443,7 +464,7 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "name": "list_risk_cases",
         "title_ko": "리스크 케이스 목록",
         "description_ko": (
-            "가맹사업법 함정 코퍼스 15건을 위험도·분류·키워드로 걸러 봅니다. 각 케이스에 "
+            "가맹사업법 함정 코퍼스 17건을 위험도·분류·키워드로 걸러 봅니다. 각 케이스에 "
             "왜 위험한지, 무엇을 물어야 하는지, 어떤 조문과 대조했는지(`law_verified`)가 붙습니다."
         ),
         "handler": tool_list_risk_cases,

@@ -1,4 +1,4 @@
-"""질문형 가이드 15종 테스트 — 실검증 조문·구조화 데이터·얇은 페이지 방지·이스케이프.
+"""질문형 가이드 17종 테스트 — 실검증 조문·구조화 데이터·얇은 페이지 방지·이스케이프.
 
 가장 중요한 검사는 `test_guide_numbers_exist_in_cited_law` 입니다.
 가이드 본문에 나오는 숫자(14일·7일·2개월·40% 등)는 그 가이드가 인용한 조문 안에
@@ -28,6 +28,7 @@ EXPECTED_SLUGS = {
     "excessive-penalty", "disclosure-false-claims", "termination-2months",
     "franchisee-association", "direct-store-1year", "ad-promotion-consent",
     "startup-subsidy-link", "renewal-10years", "dispute-mediation",
+    "essential-items-margin", "price-fixing-restriction",
 }
 
 
@@ -36,10 +37,10 @@ def flat(text: str) -> str:
 
 
 class GuideDataTest(unittest.TestCase):
-    def test_fifteen_guides(self):
-        self.assertEqual(len(guides.GUIDES), 15)
+    def test_seventeen_guides(self):
+        self.assertEqual(len(guides.GUIDES), 17)
         self.assertEqual(set(guides.slugs()), EXPECTED_SLUGS)
-        self.assertEqual(len(set(guides.slugs())), 15)
+        self.assertEqual(len(set(guides.slugs())), 17)
 
     def test_questions_and_topics_are_unique(self):
         questions = [guide["question"] for guide in guides.GUIDES]
@@ -210,7 +211,6 @@ class GuideDataTest(unittest.TestCase):
                 self.assertIn(want, known, f"{guide['slug']}: {want}")
 
     def test_relevant_slugs_for_brief_topics(self):
-        # 브리프가 지정한 주제가 실제 페이지로 존재하는지(이름만 보고 넘어가지 않게).
         by_slug = {guide["slug"]: guide for guide in guides.GUIDES}
         self.assertIn("14일", by_slug["cooling-off-14days"]["topic"])
         self.assertIn("예상매출액", by_slug["projected-sales-statement"]["topic"])
@@ -225,6 +225,20 @@ class GuideDataTest(unittest.TestCase):
         self.assertIn("직영점", by_slug["direct-store-1year"]["topic"])
         self.assertIn("광고", by_slug["ad-promotion-consent"]["topic"])
         self.assertIn("지원금", by_slug["startup-subsidy-link"]["topic"])
+        self.assertIn("필수품목", by_slug["essential-items-margin"]["topic"])
+        self.assertIn("차액가맹금", by_slug["essential-items-margin"]["topic"])
+        self.assertIn("판매가격", by_slug["price-fixing-restriction"]["topic"])
+
+    def test_new_guides_cite_disclosure_and_unfair_practice_annexes(self):
+        essential = guides.by_slug("essential-items-margin")
+        pricing = guides.by_slug("price-fixing-restriction")
+        for guide in (essential, pricing):
+            self.assertIn(engine.ANNEX_DISCLOSURE, guide["law_keys"])
+            self.assertIn(engine.ANNEX_UNFAIR, guide["law_keys"])
+        self.assertIn("가맹사업법:제11조", essential["law_keys"])
+        self.assertIn("가맹사업법:제12조", pricing["law_keys"])
+        self.assertIn("차액가맹금", guides.render_item("essential-items-margin"))
+        self.assertIn("가격의 구속", guides.render_item("price-fixing-restriction"))
 
 
 class GuideRenderTest(unittest.TestCase):
@@ -236,7 +250,7 @@ class GuideRenderTest(unittest.TestCase):
     def test_paths(self):
         paths = guides.paths()
         self.assertEqual(paths[0], "/guides/")
-        self.assertEqual(len(paths), 16)
+        self.assertEqual(len(paths), 18)
         self.assertIn("/guides/cooling-off-14days", paths)
 
     def test_every_page_renders(self):
@@ -285,7 +299,7 @@ class GuideRenderTest(unittest.TestCase):
         self.assertIn("BreadcrumbList", types)
         self.assertIn("WebPage", types)
         collection = next(item for item in parsed if item.get("@type") == "CollectionPage")
-        self.assertEqual(len(collection["hasPart"]), 15)
+        self.assertEqual(len(collection["hasPart"]), 17)
 
     def test_page_shows_question_answer_and_law_text(self):
         for guide in guides.GUIDES:
@@ -352,7 +366,7 @@ class GuideFeedsTest(unittest.TestCase):
         self.assertIn("<loc>https://example.com/guides/</loc>", sitemap)
         for guide in guides.GUIDES:
             self.assertIn(f"<loc>https://example.com/guides/{guide['slug']}</loc>", sitemap)
-        self.assertEqual(sitemap.count("<url>"), 17)
+        self.assertEqual(sitemap.count("<url>"), 19)
 
     def test_llms_lists_guides(self):
         text = static_files.llms_txt("https://example.com")

@@ -184,8 +184,8 @@ class WebUiTest(unittest.TestCase):
 
     def test_home_links_to_guides(self):
         self.assertIn('href="/guides/"', self.html)
-        self.assertIn("가이드 15종", self.html)
-        self.assertIn("가이드 전체 15종 보기", self.html)
+        self.assertIn("가이드 17종", self.html)
+        self.assertIn("가이드 전체 17종 보기", self.html)
         for slug in ("cooling-off-14days", "franchise-fee-escrow", "territory-protection",
                      "franchisee-association"):
             self.assertIn(f'href="/guides/{slug}"', self.html, slug)

@@ -45,7 +45,7 @@ class CliTest(unittest.TestCase):
         out = self.run_cli("cases")
         self.assertEqual(out.returncode, 0)
         payload = json.loads(out.stdout)
-        self.assertEqual(payload["count"], 15)
+        self.assertEqual(payload["count"], 17)
 
 
 class SiteVerificationTest(unittest.TestCase):

@@ -29,8 +29,9 @@
 | 법 위반 이력 | 공정위 시정조치·과징금·형벌선고 | 제9조①2 |
 | 해지·갱신 | 2개월 유예·서면 2회 통지, 갱신 10년 한도 | 제14조, 제13조 |
 
-함정 코퍼스 **15건**(`src/franchise_kr/traps.json`)이 위 축과 그 밖의 조항(위약금, 필수품목·
-판매목표, 가격 구속, 광고·판촉비, 정보공개서 등록)을 덮습니다. 각 케이스의 `law_refs` 는
+함정 코퍼스 **17건**(`src/franchise_kr/traps.json`)이 위 축과 그 밖의 조항(위약금, 필수품목·
+판매목표, 필수품목 단가 미공개·차액가맹금 일방 인상, 판매가격 구속·재판매가격 유지,
+광고·판촉비, 정보공개서 등록)을 덮습니다. 각 케이스의 `law_refs` 는
 실조회한 조문 키와 1:1로 대조되며, 테스트가 그 대응을 강제합니다.
 
 ## 2. 검증한 것 (추측 금지)
@@ -93,7 +94,7 @@ cd projects/franchise-kr
 PYTHONPATH=src python -m franchise_kr.server          # http://localhost:8787
 PYTHONPATH=src python -m franchise_kr.cli check --brand 샘플치킨 --days 0 --payment hq_account
 PYTHONPATH=src python -m franchise_kr.cli law "제7조"
-PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 324 tests
+PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 332 tests
 ```
 
 의존성 설치 단계가 없습니다(표준 라이브러리만). Python 3.12 기준.
@@ -108,7 +109,7 @@ LAW_GO_KR_OC=<OC> PYTHONPATH=src python -m tools.verify_law_articles     # → l
 DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # → api-verification-YYYY-MM-DD.json
 ```
 
-## 3-1. 질문형 가이드 15종 (`/guides/`) — AI 인용·검색 유입
+## 3-1. 질문형 가이드 17종 (`/guides/`) — AI 인용·검색 유입
 
 사람들이 AI·검색에 던지는 질문 하나에 답 하나를 두고, 인용되는 형식으로 만든 페이지입니다.
 
@@ -129,11 +130,13 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 | 13 | 계약갱신·10년 한도 | 계약이 끝나갈 때 갱신을 요구할 수 있나요? | 제13조·시행령 제14조 |
 | 14 | 가맹점주 단체의 협의 요청 | 단체를 만들어 조건을 협의할 수 있나요? | 제14조의2·제14조의3 |
 | 15 | 분쟁조정 신청과 시효 | 다툼이 생기면 어디에 신청하나요? | 제16조·제21조·제22조·제28조·제32조의3 |
+| 16 | 필수품목·차액가맹금 확인 | 필수품목 가격과 차액가맹금은 어떻게 확인하나요? | 제11조②12·시행령 별표 1 5.나·6.가·별표 2 2.나·3.가 |
+| 17 | 판매가격 구속(재판매가격 유지) | 본사가 권장소비자가격을 지키라고 하면 따라야 하나요? | 제12조①2·시행령 별표 2 2.가·별표 1 6.라.3 |
 
 - 페이지의 **모든 숫자(14일·7일·2개월·40%·50%·70%·180일·1.7배·3.3㎡ 등)는 그 가이드가 인용한
   조문 안에 실제로 있는지 테스트가 확인**합니다(`src/tests/test_guides.py`).
   `40%` 는 조문의 `100분의 40` 표기와 대조합니다.
-- `/sitemap.xml`(17 URL) · `/llms.txt`(가이드 15종 요약) · 홈 푸터·홈 카드·`/v1/meta` 의 `guides`
+- `/sitemap.xml`(19 URL) · `/llms.txt`(가이드 17종 요약) · 홈 푸터·홈 카드·`/v1/meta` 의 `guides`
   메타가 모두 같은 목록에서 생성됩니다.
 - 단정 표현 금지: "위법입니다 / 문제없습니다 / 안전합니다 / 무조건" 같은 확정 어구 0건을
   `src/tests/test_no_definitive_claims.py` 가 검사하고, "확정 판정 아님" 문구가 남아 있는지도 봅니다.
@@ -148,7 +151,7 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 ## 3-2. 특약·계약서 문구 스캔 (`scan_contract_text`)
 
 계약서·특약·본사 안내 문구를 텍스트로 받아, **가맹사업법·시행령 별표 2**의 불공정 유형과
-대조해 확인이 필요한 문구만 짚습니다. 결정적 규칙 엔진(정규식 10개 유형)이라 같은 문구는
+대조해 확인이 필요한 문구만 짚습니다. 결정적 규칙 엔진(정규식 12개 유형)이라 같은 문구는
 언제 넣어도 같은 결과가 나옵니다.
 
 | # | 유형 | 무엇을 찾나 | 근거 조문 |
@@ -163,6 +166,8 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 | 8 | 매출·수익 보장 | 월 순수익 보장, 적자 보전, 수익 확실 단정 | 제9조·시행령 제8조·제9조 |
 | 9 | 영업시간 구속·심야 강제 | 본사가 영업시간 결정, 단축 불허, 24시간 영업 | 제12조의3·시행령 제13조의3 |
 | 10 | 갱신 거절 제한·과도한 경업금지 | 갱신 거절, 종료 후 장기 경업금지, 10년 초과 | 제13조·시행령 제14조·제12조 |
+| 11 | 필수품목 과다·단가 미공개·차액가맹금 인상 | 필수품목 단가·산정기준 미기재, 일반 공산품까지 지정, 차액가맹금 일방 인상 | 제11조②12·시행령 별표 1 5.나·6.가·별표 2 2.나·3.가 |
+| 12 | 판매가격 구속·재판매가격 유지 | 본사가 정한 가격 유지, 할인·변경 금지, 권장가 준수 의무, 가격 위반 제재 | 제12조①2·시행령 별표 2 2.가·별표 1 6.라.3 |
 
 - 항목마다 **원문 인용(사용자가 넣은 글자 그대로)**, 위험 등급, 실조회 조문 발췌, 왜 위험한지,
   **본부에 요청할 수정 문구 예시**가 붙습니다.
@@ -174,6 +179,12 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 - 웹 홈에는 **"특약·계약서 문구 1초 스캔"** 카드와 샘플 3종(구입강제·과중 위약금·즉시 해지)
   버튼이 있습니다. 붙여넣은 문구는 저장하지 않고, 통계에도 넣지 않습니다.
 - `src/tests/test_scan.py` 가 규칙·인용·오탐 0건·0건 단정 금지·법 조문 키·조문 앵커 일치를 검사합니다.
+- 판매가격 구속 규칙은 시행령 별표 2 2.가 단서를 그대로 반영해 **권장**과 **사전협의** 문구는
+  신호로 세지 않습니다("권장소비자가격을 알려 주고 참고하게 한다", "가격을 바꿀 때 사전에 협의한다").
+  본부가 정한 가격 유지·할인 금지·권장가 준수 의무·가격 위반 제재만 짚습니다.
+- 필수품목 규칙은 **단가·산정기준 미기재**, **일반 공산품까지 지정**, **차액가맹금 일방 인상**만
+  짚습니다. 품목별 공급가격과 산정기준을 별지에 적고 변경 시 통지하는 정상 문구는 세지 않습니다
+  (`NORMAL_CLAUSES` 로 고정).
 
 **한계**: 정규식 규칙은 표시된 패턴만 찾습니다. 문장의 맥락, 예외 조항, 별지 특약 전체의
 해석은 하지 않으며, 위법 여부 판정·계약서 검토가 아닙니다.
@@ -188,7 +199,7 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 | `scan_contract_text` | 계약서·특약 문구 → 확인 필요 문구·원문 인용·근거 조문·수정 요청 문구 |
 | `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(실시간 또는 샘플 + 신청 주소) |
 | `compare_franchise_terms` | 두 프랜차이즈 조건 비교(비용·절차·위험 신호) |
-| `list_risk_cases` | 함정 코퍼스 15건(위험도·분류·키워드 필터, 조문 대조 여부) |
+| `list_risk_cases` | 함정 코퍼스 17건(위험도·분류·키워드 필터, 조문 대조 여부) |
 | `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
 | `get_service_meta` | 판정 등급·8축·법령·API 승인 상태·개인정보 설계 |
 
@@ -213,7 +224,7 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
   정상 조건), **특약·계약서 문구 1초 스캔 카드(샘플 3종)**, 결과 요약 복사, 비식별 공유 링크
   복사(`/?brand=...#check` 프리필), 다크 모드, 모바일 반응형. 공유 링크에는 **브랜드명만** 담고
   금액·조건·연락처는 담지 않습니다.
-- 질문형 가이드 `GET /guides/` · `GET /guides/{slug}` — 15종. 각 페이지는 한 줄 답, 법이 정한
+- 질문형 가이드 `GET /guides/` · `GET /guides/{slug}` — 17종. 각 페이지는 한 줄 답, 법이 정한
   기준, 계약 전 체크포인트, 흔한 오해, FAQ, 근거 조문 원문을 담고 `FAQPage`·`BreadcrumbList`·
   `WebPage` JSON-LD 를 포함합니다. `/guides` 는 `/guides/` 로 301.
 
@@ -245,7 +256,7 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 - `Dockerfile`: `python:3.12-slim`, 비루트 사용자, `HEALTHCHECK /healthz`, 표준 라이브러리만
 - `render.yaml`: Render Blueprint(도커, free, singapore, `/healthz`), `DATA_GO_KR_SERVICE_KEY`
   는 `sync: false`(대시보드에서 입력)
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.2)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.3)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`

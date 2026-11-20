@@ -336,6 +336,16 @@ def _form_html() -> str:
                  "목표 미달 시 불이익이 있으면 불공정거래행위가 될 수 있습니다.")}
   {_select_field("supplier_designated", "거래처(공급처) 지정", YES_NO_UNKNOWN,
                  "특정 업체와만 거래하도록 강제하면 구입강제가 될 수 있습니다.")}
+  {_select_field("essential_price_hidden", "필수품목 단가·산정기준 미공개", YES_NO_UNKNOWN,
+                 "단가를 나중에 알려 주겠다고 하면 매입가를 비교할 기준이 없습니다.")}
+  {_select_field("essential_items_broad", "일반 공산품까지 필수품목", YES_NO_UNKNOWN,
+                 "가맹사업과 무관한 물품을 필수품목으로 묶으면 구입강제가 될 수 있습니다.")}
+  {_select_field("margin_raise_unilateral", "차액가맹금 일방 인상", YES_NO_UNKNOWN,
+                 "적정 도매가격을 넘는 대가를 본부가 일방적으로 올리는지 확인하세요.")}
+  {_select_field("resale_price_bound", "판매가격 유지·변경 제한", YES_NO_UNKNOWN,
+                 "본부가 정한 가격을 유지하게 하면 가격 구속 유형을 검토할 수 있습니다.")}
+  {_select_field("discount_forbidden", "할인 금지", YES_NO_UNKNOWN,
+                 "할인 권한이 점주에게 있는지 계약서에서 확인하세요.")}
 </div>
 """
 
@@ -431,6 +441,8 @@ def _guides_teaser_html(limit: int = 6) -> str:
 
 
 def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
+    from . import guides
+
     meta = meta or {}
     data_state = str(meta.get("data_state") or "sample")
     law = engine.law_meta()
@@ -475,7 +487,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     <div>
       <span class="pill">v{__version__}</span>
       <span class="pill ghost">확정 판정 아님</span>
-      <a class="pill ghost" href="/guides/">가이드 15종</a>
+      <a class="pill ghost" href="/guides/">가이드 {len(guides.GUIDES)}종</a>
     </div>
   </header>
 
@@ -528,7 +540,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
       <li><b>법 위반 이력</b> — 시정조치·과징금·형벌선고</li>
       <li><b>해지·갱신</b> — 2개월 유예·서면 2회 통지, 갱신 10년 한도</li>
     </ul>
-    <p class="hint">각 항목의 조문 기준은 <a href="/guides/">질문형 가이드 15종</a>에서 확인할 수 있습니다.</p>
+    <p class="hint">각 항목의 조문 기준은 <a href="/guides/">질문형 가이드 {len(guides.GUIDES)}종</a>에서 확인할 수 있습니다.</p>
     <div class="linkcard">
       <p><b>창업비용을 낸 뒤에도 받을 수 있는 지원금이 있습니다.</b><br>
         소상공인 정책자금·청년창업·고용 지원금을 조건으로 확인하세요.</p>
@@ -540,7 +552,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     <h2>계약 전 자주 묻는 질문</h2>
     <p class="sub">정보공개서·가맹금·영업지역·해지·갱신을 조문과 함께 정리했습니다.</p>
     <ul class="clean">{_guides_teaser_html()}</ul>
-    <p class="hint"><a href="/guides/">가이드 전체 15종 보기</a></p>
+    <p class="hint"><a href="/guides/">가이드 전체 {len(guides.GUIDES)}종 보기</a></p>
   </section>
 
   {_inquiry_html()}
@@ -550,7 +562,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     위법 여부·계약 효력을 확정하지 않고, 계약서 검토·법률 자문·신고 대행을 하지 않습니다.
     최종 판단은 변호사·가맹거래사 자문으로 하세요. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
     · <a href="/llms.txt">llms.txt</a> · <a href="/v1/meta">서비스 상태</a>
-    · <a href="/guides/">가이드 15종</a>
+    · <a href="/guides/">가이드 {len(guides.GUIDES)}종</a>
   </p>
 </div>
 

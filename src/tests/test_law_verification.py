@@ -87,6 +87,23 @@ class LawVerificationFileTest(unittest.TestCase):
         self.assertIn("판매목표 강제", annex)
         self.assertIn("과중한 위약금", annex)
 
+    def test_article_11_item_12_requires_supply_price_method(self):
+        text = self.text_of("가맹사업법:제11조")
+        self.assertIn("공급 가격 산정방식", text)
+        self.assertIn("거래할 것을 강제할 경우", text)
+
+    def test_disclosure_annex_defines_margin_payment_and_essential_items(self):
+        annex = self.flat(self.text_of("가맹사업법 시행령:정보공개서의 기재사항(제4조제1항 관련)"))
+        for word in ("차액가맹금", "필수품목구입대금추정액", "주요품목별직전사업연도공급가격",
+                     "가격을정하여이에따르도록권장", "거래할것을강제또는권장"):
+            self.assertIn(word, annex, word)
+
+    def test_unfair_practice_annex_has_price_fixing_and_counterparty_restraint(self):
+        annex = self.flat(self.text_of("가맹사업법 시행령:불공정거래행위의 유형 또는 기준(제13조제1항관련)"))
+        for word in ("가.가격의구속", "나.거래상대방의구속", "사전협의를통해판매가격을강요하는행위",
+                     "가.구입강제", "경영에필요한양을넘는"):
+            self.assertIn(word, annex, word)
+
     def test_article_12_2_to_12_6(self):
         self.assertIn("점포환경개선", self.text_of("가맹사업법:제12조의2"))
         self.assertIn("영업시간", self.text_of("가맹사업법:제12조의3"))

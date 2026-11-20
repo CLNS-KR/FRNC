@@ -11,7 +11,7 @@
 
 경로
 ----
-`GET /` 웹 UI · `/guides/`(질문형 15종) · `/guides/{slug}` · `/healthz` · `/v1/meta` ·
+`GET /` 웹 UI · `/guides/`(질문형 17종) · `/guides/{slug}` · `/healthz` · `/v1/meta` ·
 `/v1/stats` · `/v1/mcp`(매니페스트) ·
 `/robots.txt` · `/llms.txt` · `/sitemap.xml` · `/.well-known/mcp/server-card.json` ·
 `POST /v1/tools/{tool}` · `/mcp`·`/v1/mcp`(JSON-RPC) · `/v1/inquiry`(문의)
