@@ -459,6 +459,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     import os as _os
     _env = dict(_os.environ)
     _env.setdefault("GOOGLE_SITE_VERIFICATION", "3KG1TCarS7RYxIpCqZ0fv8yIm8S0vBp7k1NNlVlWoxg")
+    _env.setdefault("NAVER_SITE_VERIFICATION", "f12b91bab9bab718349e637c8a043e5703a4be35")
     meta_tags = site_verification.meta_tags(_env)
     return f"""<!doctype html>
 <html lang="ko">
