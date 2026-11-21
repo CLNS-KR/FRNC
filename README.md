@@ -328,11 +328,12 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
   공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력).
   문의를 오래 보관하려면 유료 영구 디스크를 붙이고 `FRNC_INQUIRY_MIRROR`(예: `/var/data/inquiries.jsonl`)와
   `FRNC_ADMIN_TOKEN` 을 함께 설정하세요(free 플랜은 재시작 때 DB 가 바뀝니다).
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.10, 설명 100자 이하)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.11, 설명 100자 이하)
 - 고지 페이지(v0.1.9): `GET /privacy` · `GET /terms` · `GET /about` — 문의 연락처 180일 보관·삭제 요청 경로, 확정 판정 아님·전문가 자문 대체 아님, 공정위 정보공개서 출처와 3종 생태계 안내. 홈·가이드 푸터와 `sitemap.xml` 에서 이어집니다
 - 공유 카드(v0.1.9): `/static/og.png`(1200×630) + 홈·가이드·고지 페이지의 `canonical`·`og:image` 메타(파일이 없어도 표준 라이브러리 생성 PNG 로 200 유지)
 - 사용 통계 구분(v0.1.9): `/v1/stats` 의 `traffic.by_channel`·`traffic.by_client` — UA 원문·IP·쿠키는 저장하지 않습니다
 - AI 검색 구조화 데이터(v0.1.10): 홈에 `Organization`·`WebSite`(SearchAction `?brand=`)·`WebApplication` 을 `@graph` 로 묶어 `@id` 로 연결했습니다(종전에는 홈에 구조화 데이터가 없었습니다). robots.txt 에 OAI-SearchBot·Claude-SearchBot·Google-Extended·CCBot·Applebot-Extended·Bingbot 을 더하고, llms.txt 에 '구조화 데이터(JSON-LD)' 안내를 넣었습니다
+- 가이드 푸터 고지 링크(v0.1.11): 검색으로 `/guides/*` 에 바로 들어온 사람이 홈까지 돌아가지 않아도 `/privacy`·`/terms`·`/about` 으로 이어지도록 가이드 페이지 푸터에 세 링크를 넣었습니다(자매 서비스 CLNS·GRNT 링크는 그대로)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`

@@ -359,6 +359,19 @@ class GuideRenderTest(unittest.TestCase):
                 continue
             self.assertIn("<h3>법이 정한 기준</h3>", self.pages[guide["slug"]], guide["slug"])
 
+    def test_footer_has_legal_links(self):
+        """검색으로 가이드에 바로 들어온 사람이 약관·개인정보·소개로 이어져야 한다(0.1.11)."""
+        pages = dict(self.pages)
+        pages["/guides/"] = self.index
+        for slug, page in pages.items():
+            foot = page[page.index('<p class="foot">'):]
+            foot = foot[:foot.index("</p>")]
+            for path in ("/privacy", "/terms", "/about"):
+                self.assertIn(f'href="{path}"', foot, f"{slug}: {path}")
+            self.assertIn("같이 쓰는 도구", foot, slug)
+            for url in (guides.CLNS_URL, guides.GRANT_URL):
+                self.assertIn(url, foot, slug)
+
 
 class GuideFeedsTest(unittest.TestCase):
     def test_sitemap_lists_guides(self):

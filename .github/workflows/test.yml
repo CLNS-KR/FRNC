@@ -62,7 +62,7 @@ jobs:
           assert body["ok"] is True
           assert body["result"]["verdict"]["code"] == "scan_flagged", body["result"]["verdict"]
           assert body["result"]["not_a_clearance_ko"], "0건 안내 문장 누락"
-          assert body["result"]["meta"]["version"] == "0.1.10", body["result"]["meta"]["version"]
+          assert body["result"]["meta"]["version"] == "0.1.11", body["result"]["meta"]["version"]
           assert "가맹금 본사 직접 수령" in json.dumps(body, ensure_ascii=False)
           status, body = get("/guides/")
           assert status == 200

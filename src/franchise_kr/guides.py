@@ -1042,6 +1042,8 @@ def _page(title: str, description: str, body: str, canonical_path: str,
 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
 · <a href="/">리스크 체크</a> · <a href="/llms.txt">llms.txt</a> · <a href="/v1/meta">서비스 상태</a>
 · v{__version__}<br>
+<a href="/privacy">개인정보 처리방침</a> · <a href="/terms">이용약관</a> ·
+<a href="/about">서비스 소개</a><br>
 같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
 · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a></p>
 </div>

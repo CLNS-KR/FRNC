@@ -4,7 +4,7 @@ FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="FRNC" \
       org.opencontainers.image.description="Korean franchise disclosure / contract risk check (web UI + JSON API + MCP)" \
-      org.opencontainers.image.version="0.1.10"
+      org.opencontainers.image.version="0.1.11"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
