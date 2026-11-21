@@ -1,5 +1,5 @@
 """버전·브랜드 한 곳."""
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 SERVICE_NAME = "FRNC"
 SERVICE_TITLE_KO = "프랜차이즈 창업 전 10초 리스크 체크"
 SERVICE_TAGLINE = "Franchise, simplified."

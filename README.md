@@ -328,7 +328,7 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
   공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력).
   문의를 오래 보관하려면 유료 영구 디스크를 붙이고 `FRNC_INQUIRY_MIRROR`(예: `/var/data/inquiries.jsonl`)와
   `FRNC_ADMIN_TOKEN` 을 함께 설정하세요(free 플랜은 재시작 때 DB 가 바뀝니다).
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.7, 설명 100자 이하)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.8, 설명 100자 이하)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`
