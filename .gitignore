@@ -8,6 +8,9 @@ data/app.sqlite
 data/app.sqlite-shm
 data/app.sqlite-wal
 
+# 문의 미러(FRNC_INQUIRY_MIRROR) — 연락처가 들어갈 수 있어 커밋하지 않는다
+data/*.jsonl
+
 .DS_Store
 
 # 테스트 도구 캐시

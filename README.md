@@ -94,23 +94,35 @@
 
 | 항목 | 값 |
 |---|---|
-| 색인 파일 | `data/brands_index.json.gz` (약 1.9MB 압축, 저장소·이미지에 포함) |
+| 색인 파일 | `data/brands_index.json.gz` (약 2.0MB 압축, 저장소·이미지에 포함) |
 | 수집 연도 | 2026·2025·2024·2023 (연도별 1만 건대, `numOfRows=1000` × 11~12페이지) |
 | 브랜드 수 | 44,567건(연도 중복 포함) · 이름·관리번호로 즉시 검색 |
+| 가맹점 수 | 승인된 **가맹점 및 직영점(15125490)** 도 연도별 전체 페이지(연간 18~20만 행)로 받아 40,195행에 합계 저장 |
 | 갱신 | `src/tools/sync_brands_index.py` + `.github/workflows/sync-brands-index.yml` (**주 1회**, 월 05:00 KST) |
 | 색인 신선도 | 45일 이내면 이름 미매칭을 확정으로 보고 실시간 순회를 생략(느린 전체 순회 방지) |
 
 ```bash
-PYTHONPATH=src python -m tools.sync_brands_index          # 최근 4개 연도 → data/brands_index.json.gz
-PYTHONPATH=src python -m tools.sync_brands_index --check   # 네트워크 없이 색인 상태만
+PYTHONPATH=src python -m tools.sync_brands_index              # 브랜드 목록 + 가맹점 수(약 4분)
+PYTHONPATH=src python -m tools.sync_brands_index --no-stores  # 브랜드 목록만(약 1분)
+PYTHONPATH=src python -m tools.sync_brands_index --check       # 네트워크 없이 색인 상태만
 ```
 
 조회 순서는 ① **로컬 색인** ② **실시간 API 전체 페이지**(색인이 오래됐거나 관리번호로 조회할 때)
 ③ **내장 샘플** 이고, 응답의 `data_state`(live/sample)와 `data_source`(index/api/sample)가
-근거를 밝힙니다. 색인으로 찾은 브랜드에는 승인된 가맹점 데이터셋에서 **가맹점 수·직영점 수·
-최근 3년 폐점률**을 덧붙입니다(예: `BBQ` 4,632개 · 폐점률 3.3%, 2026-11-21 조회).
+근거를 밝힙니다. 색인으로 찾은 브랜드에는 **가맹점 수·직영점 수**가 바로 붙고(예: `BBQ` 가맹점
+2,316개 · 직영 71개, 2026-11-21 조회), 인증키가 있으면 승인된 가맹점 변경현황(15125491)으로
+**연간 폐점률**(예: 2025년 연초 2,249 → 연말 2,316, 6.6%)까지 붙습니다.
 못 찾았을 때는 "그 브랜드가 없다"고 단정하지 않고, 색인 규모·기준연도와 함께 표기 차이·
 직영 브랜드 가능성을 안내합니다.
+
+> **15125490 은 시·도 행과 '전체' 합계 행을 함께 줍니다.** 둘을 모두 더하면 가맹점 수가 두 배가
+> 되어(2026-11-21 이전 코드: `BBQ` 4,632개) 폐점률도 절반으로 깎였습니다. 지금은 '전체' 행이
+> 있으면 그 값만 쓰고, 색인을 만들 때도 같은 규칙으로 합칩니다.
+> **15125491 은 `jngBizCrtraYr`+`brandMnno` 를 반드시 요구**해(전체 목록 호출은 코드 11) 색인에
+> 넣지 않고 실시간 조회에서만 붙입니다. 그래서 인증키가 없으면 연초·변동·폐점률이 비고,
+> `field_status.null` 이 그 이유를 적습니다.
+> 가맹점 수는 기준연도 자료의 **회계연도**(예: 2026년 자료 → 2025년 말) 값이며, 응답의
+> `base_year`(기준연도)와 `closure_rate_year`(회계연도)를 구분해 적습니다.
 
 ## 3. 빠른 실행
 
@@ -119,7 +131,7 @@ cd projects/franchise-kr
 PYTHONPATH=src python -m franchise_kr.server          # http://localhost:8787
 PYTHONPATH=src python -m franchise_kr.cli check --brand 샘플치킨 --days 0 --payment hq_account
 PYTHONPATH=src python -m franchise_kr.cli law "제7조"
-PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 373 tests(색인 포함)
+PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 413 tests(색인 포함)
 PYTHONPATH=src python -m tools.sync_brands_index                        # 브랜드 색인 갱신(키 필요)
 ```
 
@@ -127,9 +139,22 @@ PYTHONPATH=src python -m tools.sync_brands_index                        # 브랜
 
 ### 환경변수
 `.env.example` 참고. `DATA_GO_KR_SERVICE_KEY` 는 선택입니다. 로컬에서는 프로젝트 루트의
-`.env`(gitignore)를 서버·CLI 진입점이 읽고, 없으면 색인만으로 동작합니다(가맹점 수·변동은 생략).
+`.env`(gitignore)를 서버·CLI 진입점이 읽고, 없으면 색인만으로 동작합니다(가맹점 수는 색인에,
+연초·변동·폐점률은 생략).
 `FRNC_BRANDS_INDEX` 로 색인 파일 경로를 바꿀 수 있습니다.
 `LAW_GO_KR_OC` 는 `law-verification.json` 을 다시 만들 때만 씁니다(서버는 쓰지 않음).
+
+운영용(모두 선택):
+
+| 변수 | 기본 | 역할 |
+|---|---|---|
+| `FRNC_RATE_LIMIT_PER_MINUTE` | 240 | 일반 요청 분당 허용(0이면 끔) |
+| `FRNC_RATE_WRITE_PER_MINUTE` | 30 | 문의 등 쓰기 분당 허용 |
+| `FRNC_RATE_WINDOW_SECONDS` | 60 | 제한 창 |
+| `FRNC_INQUIRY_WEBHOOK_URL` | (없음) | 문의 접수 시 POST 알림(Slack·Discord·자체 엔드포인트) |
+| `FRNC_INQUIRY_WEBHOOK_CONTACT` | 꺼짐 | `1` 이면 알림에 연락처도 포함(기본은 미포함) |
+| `FRNC_INQUIRY_MIRROR` | (없음) | 문의 JSONL 미러 파일 — 재시작 시 DB 로 복구 |
+| `FRNC_ADMIN_TOKEN` | (없음) | `GET /v1/inquiries` 토큰(없으면 그 경로는 404) |
 
 ### 검증 자료 재생성
 ```bash
@@ -225,7 +250,7 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 |---|---|
 | `check_franchise_risk` | 조건 → 위험 신호·판정·질문·체크리스트·법 조문·GRNT 연결 |
 | `scan_contract_text` | 계약서·특약 문구 → 확인 필요 문구·원문 인용·근거 조문·수정 요청 문구 |
-| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(로컬 색인 → 실시간 API → 샘플, `data_source` 로 근거 표시) |
+| `lookup_brand_disclosure` | 브랜드 1건 요약 — 승인된 데이터셋이 주는 값만(브랜드 목록·가맹점 및 직영점·변경현황, `data_source` 로 근거 표시), 비어 있는 필드는 `field_status.null` 이 이유·신청 주소를 밝힘 |
 | `compare_franchise_terms` | 두 프랜차이즈 조건 비교(비용·절차·위험 신호) |
 | `list_risk_cases` | 함정 코퍼스 17건(위험도·분류·키워드 필터, 조문 대조 여부) |
 | `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
@@ -247,7 +272,9 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 `startup_support`(GRNT 링크), `disclaimer_ko` 가 들어 있습니다.
 
 - `GET /healthz` · `/v1/meta` · `/v1/stats` · `/v1/mcp` · `/llms.txt` · `/sitemap.xml`
-- `POST /v1/tools/{tool}` · `POST /v1/inquiry`(문의)
+- `POST /v1/tools/{tool}` · `POST /v1/inquiry`(문의) · `GET /v1/inquiries`(문의 조회, `X-Admin-Token` 필요)
+- 요청 제한: 넘으면 `429` + `Retry-After`(기본 분당 240회, 문의 분당 30회, `/healthz` 예외).
+  IP 는 저장하지 않고 프로세스 난수로 해시한 메모리 키만 씁니다(재배포 시 초기화).
 - 웹 UI `GET /` — **브랜드 정보공개서 조회 카드**(`/#brand-card`, 브랜드명 부분 일치·관리번호),
   원클릭 프리셋 4개(당일 계약·본사 송금 / 구두 매출 보장 / 인테리어 100% 강제 / 정상 조건),
   **특약·계약서 문구 1초 스캔 카드(샘플 3종)**, 결과 요약 복사, 비식별 공유 링크
@@ -277,6 +304,13 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
   없다"도 "안전하다"도 아니며, 응답에는 고정 안내(`live_api.ZERO_RESULT_NOTICE_KO`)가 붙습니다.
 - 유일한 예외는 하단 문의 카드에 이용자가 직접 적은 연락처로, 회신 목적으로만 별도 표에
   두고 응답에 되비추지 않으며 180일 뒤 지웁니다.
+- 무료 플랜은 영구 디스크가 없어 재시작 때 DB 가 초기화됩니다. 그래서 문의는 **접수 성공 직후**
+  ① 웹훅(`FRNC_INQUIRY_WEBHOOK_URL`) ② JSONL 미러(`FRNC_INQUIRY_MIRROR`)를 남길 수 있고,
+  미러가 있으면 서버가 다시 뜰 때 `notify.restore()` 가 SQLite 로 되돌려 놓습니다.
+  기본 웹훅 본문에는 **연락처를 넣지 않고**(접수번호·유형·미리보기만) 채널에 개인정보가
+  남지 않게 하며, 관리자 조회(`GET /v1/inquiries`, 토큰)에서만 연락처를 돌려줍니다.
+- 요청 제한은 IP 를 저장하지 않습니다 — 프로세스가 시작할 때 만든 난수로 해시한 메모리 키만
+  쓰고 창이 지나면 지웁니다. 막힌 요청은 `/v1/stats` 의 `flags.rate_limited` 횟수로만 남습니다.
 - 저장소에는 실명·연락처·직업·계정 같은 개인정보를 두지 않습니다. `src/tests/test_privacy.py`
   가 휴대전화·주민등록번호·이메일·카드번호·인증키 패턴을 검사하고, 로컬 전용
   `.private-terms`(gitignore·dockerignore 대상)가 있으면 그 문자열까지 확인합니다.
@@ -285,8 +319,10 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 
 - `Dockerfile`: `python:3.12-slim`, 비루트 사용자, `HEALTHCHECK /healthz`, 표준 라이브러리만
 - `render.yaml`: Render Blueprint(도커, free, singapore, `/healthz`) — 서비스 이름 `frnc`,
-  공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력)
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.5, 설명 100자 이하)
+  공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력).
+  문의를 오래 보관하려면 유료 영구 디스크를 붙이고 `FRNC_INQUIRY_MIRROR`(예: `/var/data/inquiries.jsonl`)와
+  `FRNC_ADMIN_TOKEN` 을 함께 설정하세요(free 플랜은 재시작 때 DB 가 바뀝니다).
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.6, 설명 100자 이하)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`
@@ -297,15 +333,21 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 1. **확정 판정이 아니다.** 입력한 조건과 공개 조문의 대조일 뿐, 위법 여부·계약 효력을
    판단하지 않습니다. 계약서 검토·법률 자문·신고 대행을 하지 않습니다.
 2. 브랜드 조회는 승인된 데이터셋(18개 중 4개)으로 답합니다. 브랜드명·본부·업종·가맹사업
-   개시일은 색인(승인 15125467)에서, 가맹점 수·직영점·최근 3년 폐점률은 승인된 15125490·15125491
-   에서 옵니다. **평균매출(15110241)·창업비용·법 위반 이력은 아직 미승인**이라 값이 비고
-   `apply_urls` 로 신청 주소를 안내합니다. 서버에 인증키가 없으면 색인만으로 답하고
-   (`data_state=live`, 가맹점 수 생략) 이 사실을 화면·응답에 적습니다.
+   개시일은 색인(승인 15125467)에서, 가맹점 수·직영점 수는 승인된 15125490 에서(시·도 행과
+   '전체' 행 중 '전체' 값 — 더하지 않습니다), 연초·신규·계약종료·계약해지·연간 폐점률은
+   승인된 15125491 에서 실시간으로 옵니다. **평균매출(15110241)·창업비용·법 위반 이력은
+   아직 미승인**이라 값이 `null` 이며, 응답의 `field_status.null` 이 항목별 사유·데이터셋 번호·
+   신청 주소를 밝힙니다(`null` 은 '0'도 '없음·문제없음'도 아닙니다). 정보공개서 등록번호·등록일은
+   가맹정보 데이터셋에 없어 항상 비어 있습니다.
+   서버에 인증키가 없으면 색인만으로 답하고(`data_state=live`, 가맹점 수는 색인 값), 비는 항목의
+   이유를 `field_status` 에 "인증키가 없어 실시간 재조회를 하지 않았습니다"로 적습니다.
    응답 봉투가 문서와 다르면 `unexpected_shape` 로 남기고 **0건으로 단정하지 않습니다**.
 3. 정보공개서 목록·목차·본문(15125569·15125570·15125571)은 data.go.kr 제공형태가 LINK라
    REST 로 부를 수 없습니다. 본문은 가맹사업정보제공시스템에서 열람해야 합니다.
 4. 단위면적당 평균매출(15125494)은 오퍼레이션 이름을 확인하지 못해 `unverified` 로 남겼습니다.
-5. 폐점률은 3년 변동 자료(15125491)가 있을 때 계산하고, 자료가 없으면 '모름'으로 두고 묻습니다.
+5. 폐점률은 기준연도 **1년** 변동입니다(연초 = 자료가 없으면 연말 - 신규 + 종료 + 해지).
+   '최근 3년' 통계가 아니며, 3년치를 모르는 값을 그렇게 부르지 않습니다 — 응답은
+   `closure_rate_pct`·`closure_rate_year`·`closure_rate_basis_ko` 로 근거를 함께 줍니다.
    색인의 브랜드 수는 연도별 목록을 합친 값이라 실제 브랜드 수와 다릅니다(중복 포함).
 6. 문구 스캔은 정규식 규칙이 표시된 패턴만 찾습니다. 잡히지 않은 문구를 '적법'으로,
    잡힌 문구를 '위법'으로 단정하지 않습니다. 문장 구조를 해석하는 모델이 아니라,

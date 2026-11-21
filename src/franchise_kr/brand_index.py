@@ -13,8 +13,22 @@
    `tools/sync_brands_index.py`, 주 1회 GitHub Actions 갱신).
 2) 온라인: 색인에서 즉시 찾고, 색인에 없으면 실시간 API 를 전체 페이지로 재조회합니다.
 
-색인 파일에는 공개 API 가 준 식별 정보(브랜드명·관리번호·본부·업종·주요상품·개시일·사업자번호·
+색인 행에는 공개 API 가 준 식별 정보(브랜드명·관리번호·본부·업종·주요상품·개시일·사업자번호·
 기준연도)만 넣습니다. 인증키·개인정보는 넣지 않습니다.
+
+가맹점 수·직영점 수(15125490)
+------------------------------
+브랜드 목록만으로는 "이 브랜드가 몇 곳인지"를 알 수 없어, 색인을 만들 때 승인된
+**가맹점 및 직영점 데이터셋(15125490)** 도 연도별로 전체 페이지 훑어 같이 저장합니다
+(`--with-stores`). 그러면 인증키가 없어도 가맹점 수·직영점 수가 바로 나오고, 서버가
+인증키를 가졌을 때도 조회마다 20만 행짜리 데이터셋을 다시 부르지 않습니다.
+
+주의: 이 데이터셋은 시·도 행 17개와 **'전체' 합계 행**을 함께 줍니다. 모두 더하면 두 배가
+되므로 '전체' 행이 있으면 그 값만 씁니다(2026-11-21 실측: `BBQ` 2,316개).
+
+가맹점 변경현황(15125491)은 `jngBizCrtraYr`+`brandMnno` 를 반드시 요구해 전체 목록으로
+받을 수 없습니다(코드 11). 그래서 연초·신규·계약종료·계약해지·폐점률은 색인에 넣지 않고
+실시간 조회에서만 붙입니다.
 """
 from __future__ import annotations
 
@@ -44,6 +58,16 @@ ROW_FIELDS = (
     ("s", "jngBizStrtDate"), ("b", "brno"), ("y", "jngBizCrtraYr"),
 )
 
+# 가맹점 및 직영점(15125490) 합계 — 색인에 같이 저장하는 숫자.
+STORE_FIELDS = (
+    ("fs", "frcsCnt"), ("ds", "dmsCnt"), ("ar", "stores_area_count"),
+    ("sfs", "stores_source"),
+)
+STORE_TOTAL_AREA = "전체"
+STORE_DATASET_ID = "15125490"
+STORE_PAGE_SIZE = 1000
+STORE_MAX_PAGES = 400      # 연간 18~20만 행(2026-11-21 실측) → 200페이지 선
+
 
 def _norm(text: Any) -> str:
     return re.sub(r"\s+", "", str(text or "")).lower()
@@ -69,7 +93,7 @@ def _compact(row: Dict[str, Any]) -> Dict[str, Any]:
 def _expand(row: Dict[str, Any]) -> Dict[str, Any]:
     """색인 행(짧은 키) → API 필드명 행(`normalize_brand_row` 가 그대로 읽는다)."""
     out: Dict[str, Any] = {}
-    for short, long in ROW_FIELDS:
+    for short, long in ROW_FIELDS + STORE_FIELDS:
         value = row.get(short)
         if value not in (None, ""):
             out[long] = value
@@ -122,13 +146,106 @@ def _int(value: Any) -> Optional[int]:
         return None
 
 
+def store_totals(client: Any, endpoint: str, year: int, *,
+                 page_size: int = STORE_PAGE_SIZE,
+                 max_pages: int = STORE_MAX_PAGES,
+                 workers: int = 1) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    """`15125490` 전체 페이지 → `{브랜드관리번호: {frcsCnt, dmsCnt, areas, total_row}}`.
+
+    지역 행과 '전체' 합계 행이 함께 오므로, '전체' 행이 있으면 그 값을 쓰고 없을 때만
+    지역 행을 합칩니다(둘 다 더하면 두 배). 끝까지 못 받았으면 `complete=False`.
+    `workers`>1 이면 페이지를 여러 개씩 동시에 받습니다(색인 빌드 시간 단축).
+    """
+    totals: Dict[str, Dict[str, Any]] = {}
+    info: Dict[str, Any] = {"year": int(year), "pages": 0, "total": None,
+                            "complete": False, "code": "", "shape": ""}
+    size = max(1, min(int(page_size or STORE_PAGE_SIZE), PAGE_SIZE_MAX))
+    workers = max(1, int(workers or 1))
+    page = 1
+    while page <= max(1, int(max_pages)):
+        batch = [p for p in range(page, min(page + workers, max_pages + 1))]
+        responses = _page_responses(client, endpoint, batch, size, year)
+        stop = False
+        for current, response in zip(batch, responses):
+            info["pages"] = current
+            info["code"] = str(response.get("code") or "")
+            info["shape"] = str(response.get("raw_shape") or "")
+            if info["code"] not in ("0", "00") or info["shape"] in ("unknown", "none"):
+                stop = True
+                break
+            page_rows = [row for row in (response.get("rows") or []) if isinstance(row, dict)]
+            _merge_store_rows(totals, page_rows)
+            total = _int(response.get("total"))
+            if total:
+                info["total"] = total
+            if len(page_rows) < size:
+                info["complete"] = True
+                stop = True
+                break
+            if total and current * size >= total:
+                info["complete"] = True
+                stop = True
+                break
+        if stop:
+            break
+        page += len(batch)
+    info["brands"] = len(totals)
+    return totals, info
+
+
+def _page_responses(client: Any, endpoint: str, pages: List[int], size: int,
+                    year: int) -> List[Dict[str, Any]]:
+    """페이지 여러 장을 (가능하면) 동시에 받는다 — 결과 순서는 `pages` 그대로."""
+    params = [{"pageNo": page, "numOfRows": size, "resultType": "json",
+               "jngBizCrtraYr": year} for page in pages]
+    if len(params) <= 1:
+        return [client.call(endpoint, params[0])] if params else []
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+    except ImportError:  # pragma: no cover - 표준 라이브러리 방어
+        return [client.call(endpoint, item) for item in params]
+    with ThreadPoolExecutor(max_workers=len(params)) as pool:
+        futures = [pool.submit(client.call, endpoint, item) for item in params]
+        return [future.result() for future in futures]
+
+
+def _merge_store_rows(totals: Dict[str, Dict[str, Any]], page_rows: List[Dict[str, Any]]) -> None:
+    for row in page_rows:
+        code = str(row.get("brandMnno") or "").strip()
+        if not code:
+            continue
+        bucket = totals.setdefault(code, {"frcsCnt": None, "dmsCnt": None,
+                                          "areas": 0, "total_row": False})
+        area = str(row.get("areaNm") or "").strip()
+        frcs = _int(row.get("frcsCnt"))
+        dms = _int(row.get("dmsCnt"))
+        if area == STORE_TOTAL_AREA:
+            bucket["total_row"] = True
+            if frcs is not None:
+                bucket["frcsCnt"] = frcs
+            if dms is not None:
+                bucket["dmsCnt"] = dms
+            continue
+        bucket["areas"] += 1
+        if bucket["total_row"]:
+            continue          # 합계 행이 이미 있으면 지역 행은 더하지 않는다.
+        if frcs is not None:
+            bucket["frcsCnt"] = (bucket["frcsCnt"] or 0) + frcs
+        if dms is not None:
+            bucket["dmsCnt"] = (bucket["dmsCnt"] or 0) + dms
+
+
 def build(client: Any, endpoint: str, years: Iterable[int], *, page_size: int = PAGE_SIZE,
-          max_pages: int = MAX_PAGES) -> Dict[str, Any]:
+          max_pages: int = MAX_PAGES, with_stores: bool = False,
+          store_endpoint: str = "", store_page_size: int = STORE_PAGE_SIZE,
+          store_max_pages: int = STORE_MAX_PAGES, store_workers: int = 1) -> Dict[str, Any]:
     """여러 연도를 훑어 색인 페이로드를 만든다(최신 연도 우선).
 
+    `with_stores=True` 이고 `store_endpoint` 가 있으면 승인된 가맹점 및 직영점(15125490)도
+    연도별로 훑어 각 행에 가맹점 수·직영점 수를 붙입니다(인증키 없이도 값이 나온다).
+
     `k` = 그 브랜드가 실린 연도 수 — 규모의 거친 대리 지표로 정렬에만 쓴다
-    (가맹점 수가 아니라 '몇 년치 목록에 올라 있었는지'다). 정확한 가맹점 수는 조회 시
-    승인된 가맹점 데이터셋으로 덧붙인다(`live_api._enrich`).
+    (가맹점 수가 아니라 '몇 년치 목록에 올라 있었는지'다).
     """
     year_list = [int(year) for year in years]
     rows: List[Dict[str, Any]] = []
@@ -138,6 +255,27 @@ def build(client: Any, endpoint: str, years: Iterable[int], *, page_size: int = 
                                    max_pages=max_pages)
         report.append({"year": year, **info, "rows": len(fetched)})
         rows.extend(_compact(row) for row in fetched)
+    store_report: List[Dict[str, Any]] = []
+    with_stores_count = 0
+    if with_stores and store_endpoint:
+        for year in year_list:
+            totals, info = store_totals(client, store_endpoint, year, page_size=store_page_size,
+                                        max_pages=store_max_pages, workers=store_workers)
+            store_report.append(info)
+            filled = 0
+            for row in rows:
+                if str(row.get("y")) != str(year):
+                    continue
+                value = totals.get(str(row.get("c") or ""))
+                if not value or value.get("frcsCnt") is None:
+                    continue
+                row["fs"] = value["frcsCnt"]
+                row["ds"] = value["dmsCnt"]
+                row["ar"] = value["areas"]
+                row["sfs"] = "brand_direct_stores_index"
+                filled += 1
+            with_stores_count += filled
+            info["filled_rows"] = filled
     presence: Dict[str, int] = {}
     for row in rows:
         key = str(row.get("c") or _norm(row.get("n")))
@@ -147,7 +285,7 @@ def build(client: Any, endpoint: str, years: Iterable[int], *, page_size: int = 
         row["k"] = presence.get(key, 1)
     rows.sort(key=lambda row: (-(_int(row.get("y")) or 0), _norm(row.get("n")), row.get("c") or ""))
     primary = _int(rows[0]["y"]) if rows else (year_list[0] if year_list else None)
-    return {
+    payload = {
         "version": INDEX_VERSION,
         "built_at": datetime.now(KST).isoformat(timespec="seconds"),
         "source": "공정거래위원회 가맹정보 오픈API · FftcBrandRlsInfo2_Service/getBrandinfo",
@@ -158,8 +296,15 @@ def build(client: Any, endpoint: str, years: Iterable[int], *, page_size: int = 
         "primary_year": primary,
         "count": len(rows),
         "fetches": report,
+        "stores": ({
+            "dataset_id": STORE_DATASET_ID,
+            "endpoint": store_endpoint,
+            "fetches": store_report,
+            "rows_with_stores": with_stores_count,
+        } if with_stores and store_endpoint else {}),
         "rows": rows,
     }
+    return payload
 
 
 def save(payload: Dict[str, Any], path: Optional[str] = None) -> Path:
@@ -222,12 +367,18 @@ def age_days(built_at: Any) -> Optional[int]:
 
 
 def meta(path: Optional[str] = None) -> Dict[str, Any]:
-    """색인 상태 요약(파일이 없으면 available=False)."""
+    """색인 상태 요약(파일이 없으면 available=False).
+
+    `stores` 는 색인에 함께 저장된 가맹점 및 직영점(15125490) 합계의 적용 범위다.
+    """
     payload = load(path)
     if payload is None:
         return {"available": False, "count": 0, "year": None, "built_at": None,
-                "age_days": None, "fresh": False, "file": index_path(path).name}
+                "age_days": None, "fresh": False, "file": index_path(path).name,
+                "stores": {"available": False, "rows_with_stores": 0}}
     age = age_days(payload.get("built_at"))
+    stores = payload.get("stores") or {}
+    rows_with_stores = int(stores.get("rows_with_stores") or 0)
     return {
         "available": True,
         "count": int(payload.get("count") or 0),
@@ -239,6 +390,11 @@ def meta(path: Optional[str] = None) -> Dict[str, Any]:
         "file": payload.get("_path"),
         "dataset_id": payload.get("dataset_id"),
         "source": payload.get("source"),
+        "stores": {
+            "available": rows_with_stores > 0,
+            "dataset_id": stores.get("dataset_id") or STORE_DATASET_ID,
+            "rows_with_stores": rows_with_stores,
+        },
     }
 
 

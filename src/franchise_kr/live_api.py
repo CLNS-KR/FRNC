@@ -13,10 +13,19 @@
 2) 색인에 없으면 **실시간 API 전체 페이지 재조회** → 그래도 없으면 `not_found`
    (끝까지 받지 못했으면 `partial_scan` 으로 남기고 '없다'고 단정하지 않습니다).
 
-정직한 한계
------------
-- 가맹점 수·계약종료·계약해지·평균매출 같은 수치는 해당 데이터셋이 승인된 경우에만
-  덧붙입니다(지금은 가맹점 변경현황만 승인 → 가맹점 수·폐점률 계산 가능).
+가맹점 수·직영점 수·폐점률(2026-11-21 실측으로 고친 것)
+---------------------------------------------------
+- `15125490`(가맹점 및 직영점)은 **지역(시·도) 행과 '전체' 행을 함께** 돌려줍니다.
+  예전에는 이걸 모두 더해 `BBQ` 가맹점 수를 4,632개로 두 배 부풀렸습니다(실제 연말 2,316개).
+  지금은 **'전체' 행이 있으면 그 값을 쓰고**, 없을 때만 시·도 행을 합칩니다.
+- `15125491`(가맹점 변경현황)은 `jngBizCrtraYr`+`brandMnno` 를 **반드시** 요구합니다(전체
+  목록 호출은 코드 11). 그래서 이 데이터는 실시간 조회에서만 붙이고, 색인에는 넣지 않습니다.
+- 폐점률은 '최근 3년'이 아니라 **기준연도의 전년 대비 1년 변동**입니다. 응답 필드는
+  `closure_rate_pct`(연간) + `closure_rate_year` + `closure_rate_basis_ko`(연초·연말·신규·
+  계약종료·계약해지)로 나눠 적고, 3년치를 모르는 값을 '3년 폐점률'이라 부르지 않습니다.
+- 승인되지 않은 데이터셋이 주는 값(평균매출·가맹비·법 위반 이력 등)은 `null` 이며, 응답의
+  `field_status.null` 이 **왜 비었는지·어떤 데이터셋인지·활용신청 주소**를 밝힙니다.
+  `null` 은 '0'도 '없음·문제없음'도 아닙니다(`NULL_MEANING_KO`).
 - 응답 행 추출(`_rows`)은 문서화된 `response.body.items.item` · `items` · `data` 세 형태를
   모두 받도록 방어적으로 썼습니다. 형태가 다르면 `status` 가 `unexpected_shape` 로 남고
   조용히 0건으로 답하지 않습니다.
@@ -95,6 +104,62 @@ ZERO_RESULT_NOTICE_KO = (
     "검색 결과가 0건이라는 것은 '그런 브랜드가 없다'는 뜻도, '문제없다·안전하다'는 뜻도 아닙니다. "
     "브랜드명 표기(띄어쓰기·영문/한글·줄임말)가 다르거나, 아직 조회 데이터에 없는 경우일 수 있습니다. "
     "가맹사업정보제공시스템에서 등록 정보공개서를 직접 확인하세요."
+)
+
+# `null` 의 뜻 — 화면·API·MCP 가 같은 문장을 쓴다.
+NULL_MEANING_KO = (
+    "null 은 '0'도 '없음·문제없음'도 아닙니다. 그 값을 주는 공정위 데이터셋이 아직 이 인증키에 "
+    "승인되지 않았거나, 이 브랜드·기준연도에 값이 없거나, 서버에 인증키가 없어 실시간 재조회를 "
+    "하지 않은 경우입니다. 어느 경우인지는 field_status.null 이 항목별로 밝힙니다."
+)
+
+# 가맹점 및 직영점 데이터셋(15125490)은 지역 행과 '전체' 합계 행을 함께 준다.
+STORE_TOTAL_AREA = "전체"
+
+# 데이터셋 키 → 데이터셋 번호(검증 파일을 못 읽어도 근거를 밝힐 수 있게).
+DATASET_IDS = {
+    "brand_list": "15125467", "hq_general": "15125450", "brand_stores": "15110241",
+    "brand_direct_stores": "15125490", "brand_store_change": "15125491",
+    "brand_startup_amount": "15110265", "brand_interior_cost": "15125479",
+    "brand_franchise_fee": "15125476", "brand_burden": "15125475",
+    "brand_fee_deposit": "15125480", "hq_violation": "15125463",
+    "hq_corrective": "15125464", "hq_penalty": "15125466", "brand_iprs": "15125471",
+    "brand_store_period": "15125484", "brand_compare": "15125517", "hq_history": "15125452",
+    "brand_unit_sales": "15125494",
+}
+
+# `lookup_brand_disclosure` 응답 필드 ↔ 그 값을 주는 데이터셋.
+# (필드, 화면 라벨, 데이터셋 키 또는 None, 데이터셋이 없을 때의 설명)
+FIELD_SPECS = (
+    ("brand_name", "브랜드명", "brand_list", ""),
+    ("brand_code", "브랜드관리번호", "brand_list", ""),
+    ("hq_name", "가맹본부", "brand_list", ""),
+    ("industry_large", "업종(대)", "brand_list", ""),
+    ("industry_mid", "업종(중)", "brand_list", ""),
+    ("main_product", "주요상품", "brand_list", ""),
+    ("started_on", "가맹사업 개시일", "brand_list", ""),
+    ("base_year", "기준연도", "brand_list", ""),
+    ("brno", "사업자등록번호", "brand_list", ""),
+    ("stores_year_end", "가맹점 수(자료 회계연도 연말)", "brand_direct_stores", ""),
+    ("direct_stores", "직영점 수", "brand_direct_stores", ""),
+    ("stores_area_count", "지역(시·도) 수", "brand_direct_stores", ""),
+    ("start_stores", "연초 가맹점 수", "brand_store_change", ""),
+    ("new_stores", "신규 가맹점", "brand_store_change", ""),
+    ("terminated", "계약종료", "brand_store_change", ""),
+    ("cancelled", "계약해지", "brand_store_change", ""),
+    ("closure_rate_pct", "연간 폐점률(%)", "brand_store_change", ""),
+    ("avg_sales_krw", "가맹점 평균매출액", "brand_stores", ""),
+    ("franchise_fee_krw", "가맹비", "brand_startup_amount", ""),
+    ("education_fee_krw", "가맹교육비", "brand_startup_amount", ""),
+    ("deposit_krw", "가맹보증금", "brand_startup_amount", ""),
+    ("interior_per_m2_krw", "인테리어 비용(㎡당)", "brand_interior_cost", ""),
+    ("legal_violation_count", "법 위반 이력", "hq_violation", ""),
+    ("disclosure_no", "정보공개서 등록번호", None,
+     "브랜드 목록·가맹점 데이터셋에는 정보공개서 등록번호가 없습니다. "
+     "가맹사업정보제공시스템(franchise.ftc.go.kr)에서 직접 확인하세요."),
+    ("disclosure_registered_on", "정보공개서 등록일", None,
+     "브랜드 목록·가맹점 데이터셋에는 등록일이 없습니다. "
+     "가맹사업정보제공시스템(franchise.ftc.go.kr)에서 직접 확인하세요."),
 )
 
 
@@ -384,9 +449,23 @@ def _num(value: Any) -> Optional[float]:
         return None
 
 
+def _first_num(row: Dict[str, Any], *names: str) -> Optional[float]:
+    """여러 이름 중 **처음으로 값이 있는** 숫자(0 도 유효한 값으로 본다)."""
+    for name in names:
+        if name in row and row[name] not in (None, ""):
+            value = _num(row[name])
+            if value is not None:
+                return value
+    return None
+
+
 def normalize_brand_row(row: Dict[str, Any], year: Optional[int] = None,
                         data_state: str = "live") -> Dict[str, Any]:
-    """API 행(또는 샘플 행) → 화면·API 공통 필드."""
+    """API 행(또는 색인 행) → 화면·API 공통 필드.
+
+    가맹점 수(`stores_year_end`)는 '전체' 합계 기준입니다. 색인이 미리 계산해 둔 값이면
+    `stores_source=brand_direct_stores_index`, 실시간 호출이면 `brand_direct_stores` 입니다.
+    """
     def amount(*names: str) -> Optional[int]:
         value = _num(_pick(row, *names))
         return int(value) if value is not None else None
@@ -394,6 +473,7 @@ def normalize_brand_row(row: Dict[str, Any], year: Optional[int] = None,
     return {
         "data_state": data_state,
         "base_year": int(_num(_pick(row, "baseYear", "jngBizCrtraYr")) or (year or 0)) or None,
+        "acntg_year": int(_num(_pick(row, "acntgYr")) or 0) or None,
         "brand_name": _pick(row, "brandNm", "brand_name"),
         "brand_code": _pick(row, "brandMnno", "brand_code"),
         "hq_name": _pick(row, "corpNm", "jnghdqrtrsNm", "hq_name"),
@@ -405,10 +485,12 @@ def normalize_brand_row(row: Dict[str, Any], year: Optional[int] = None,
         "brno": _pick(row, "brno"),
         "stores_year_end": amount("frcsCnt", "stores_year_end"),
         "direct_stores": amount("dmsCnt", "direct_stores"),
+        "stores_area_count": amount("stores_area_count"),
         "stores_source": _pick(row, "stores_source"),
+        "start_stores": amount("ystFrcsCnt", "start_stores"),
         "new_stores": amount("newFrcsCnt", "new_stores"),
-        "terminated": amount("ctrtTrmnCnt", "terminated"),
-        "cancelled": amount("ctrtCnncCnt", "cancelled"),
+        "terminated": amount("ctrtEndFrcsCnt", "ctrtTrmnCnt", "terminated"),
+        "cancelled": amount("ctrtCncltnFrcsCnt", "ctrtCnncCnt", "cancelled"),
         "avg_sales_krw": amount("avrgSalesAmt", "avg_sales_krw"),
         "unit_area_sales_krw": amount("arUnitAvrgSalesAmt", "unit_area_sales_krw"),
         "franchise_fee_krw": amount("jnntAmt", "franchise_fee_krw"),
@@ -418,7 +500,7 @@ def normalize_brand_row(row: Dict[str, Any], year: Optional[int] = None,
         "disclosure_no": _pick(row, "infoPblsRgsNo", "disclosure_no"),
         "disclosure_registered_on": _pick(row, "infoPblsRgsDe", "disclosure_registered_on"),
         "legal_violation_count": amount("lawVioltCnt", "legal_violation_count"),
-        "closure_rate_3y_pct": _num(_pick(row, "closure_rate_3y_pct")),
+        "closure_rate_pct": _num(_pick(row, "closure_rate_pct")),
         "avg_store_area_m2": _num(_pick(row, "avg_store_area_m2")),
         "note_ko": _pick(row, "note_ko") or "",
     }
@@ -445,21 +527,136 @@ def sample_lookup(query: str = "", brand_code: str = "") -> List[Dict[str, Any]]
             found.append(row)
     if not found and not target and not code:
         found = rows[:3]
-    return [normalize_brand_row(row, data_state="sample") for row in found]
+    brands = [normalize_brand_row(row, data_state="sample") for row in found]
+    for brand in brands:
+        _apply_closure(brand)   # 샘플이어도 계산 근거가 있으면 같은 규칙으로 폐점률을 채운다.
+    return brands
+
+
+def closure_basis(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """연초·연말·신규·계약종료·계약해지로 **1년** 폐점률과 그 근거를 계산한다.
+
+    연초 값(`ystFrcsCnt`)이 있으면 그대로 쓰고, 없으면 연초 = 연말 - 신규 + 종료 + 해지로
+    되돌립니다. 세 해를 모르는 값을 '3년 폐점률'이라고 부르지 않습니다.
+    """
+    end = _first_num(row, "yndFrcsCnt", "frcsCnt", "stores_year_end")
+    start = _first_num(row, "ystFrcsCnt", "start_stores")
+    new = _first_num(row, "newFrcsCnt", "new_stores")
+    term = _first_num(row, "ctrtEndFrcsCnt", "ctrtTrmnCnt", "terminated")
+    cancel = _first_num(row, "ctrtCncltnFrcsCnt", "ctrtCnncCnt", "cancelled")
+    if start is None:
+        if None in (end, new, term, cancel):
+            return None
+        start = end - new + term + cancel
+    if start is None or start <= 0 or term is None or cancel is None:
+        return None
+    basis: Dict[str, Any] = {
+        "start_stores": int(start),
+        "terminated": int(term),
+        "cancelled": int(cancel),
+        "rate_pct": round((term + cancel) / start * 100.0, 1),
+    }
+    if end is not None:
+        basis["end_stores"] = int(end)
+    if new is not None:
+        basis["new_stores"] = int(new)
+    return basis
 
 
 def closure_rate_from_rows(row: Dict[str, Any]) -> Optional[float]:
-    """연초·신규·종료·해지로 폐점률을 추정(연초 = 연말 - 신규 + 종료 + 해지)."""
-    end = _num(row.get("frcsCnt") or row.get("stores_year_end"))
-    new = _num(row.get("newFrcsCnt") or row.get("new_stores"))
-    term = _num(row.get("ctrtTrmnCnt") or row.get("terminated"))
-    cancel = _num(row.get("ctrtCnncCnt") or row.get("cancelled"))
-    if None in (end, new, term, cancel):
-        return None
-    start = end - new + term + cancel
-    if start <= 0:
-        return None
-    return round((term + cancel) / start * 100.0, 1)
+    """1년 폐점률(%) — 근거가 모자라면 None(0을 돌려주지 않는다)."""
+    basis = closure_basis(row)
+    return basis["rate_pct"] if basis else None
+
+
+def _closure_basis_ko(basis: Dict[str, Any], year: Optional[int]) -> str:
+    head = f"{year}년 " if year else ""
+    parts = [f"{head}연초 {basis['start_stores']:,}곳"]
+    if "end_stores" in basis:
+        parts.append(f"연말 {basis['end_stores']:,}곳")
+    moves = []
+    if "new_stores" in basis:
+        moves.append(f"신규 {basis['new_stores']:,}")
+    moves.append(f"계약종료 {basis['terminated']:,}")
+    moves.append(f"계약해지 {basis['cancelled']:,}")
+    return " → ".join(parts) + " · " + " · ".join(moves)
+
+
+def field_status(brands: List[Dict[str, Any]], datasets: Optional[List[Dict[str, Any]]] = None,
+                 *, data_source: str = "", key_present: bool = False,
+                 data_state: str = "") -> Dict[str, Any]:
+    """조회 결과의 **필드 계약** — 어떤 값이 실렸고, 비어 있는 필드는 왜 비었는지.
+
+    툴 설명(`api.py` `lookup_brand_disclosure`)과 응답이 같은 말을 하게 만드는 장치입니다.
+    `null` 을 '0'이나 '없음·문제없음'으로 읽지 않도록 사유·데이터셋·신청 주소를 함께 돌려줍니다.
+    """
+    if not brands:
+        return {
+            "scope_ko": "조회 결과가 없어 필드별 상태를 계산하지 않았습니다.",
+            "returned": [],
+            "null": [],
+            "meaning_ko": NULL_MEANING_KO,
+        }
+    known: Dict[str, Dict[str, Any]] = {}
+    for row in dataset_summary().get("datasets") or []:
+        if row.get("key"):
+            known[str(row["key"])] = dict(row)
+    for row in datasets or []:
+        key = row.get("key")
+        if not key:
+            continue
+        merged = dict(known.get(str(key)) or {})
+        merged.update({name: value for name, value in row.items() if value not in (None, "")})
+        known[str(key)] = merged
+
+    brand = brands[0]
+    returned: List[str] = []
+    missing: List[Dict[str, Any]] = []
+    for field, label, dataset_key, note_ko in FIELD_SPECS:
+        value = brand.get(field)
+        if value not in (None, "", []):
+            returned.append(field)
+            continue
+        item: Dict[str, Any] = {"field": field, "label_ko": label}
+        if dataset_key:
+            entry = known.get(dataset_key) or {}
+            approval = str(entry.get("approval") or "unknown")
+            item.update({
+                "dataset": dataset_key,
+                "dataset_id": entry.get("dataset_id") or DATASET_IDS.get(dataset_key, ""),
+                "title_ko": entry.get("title_ko") or "",
+                "approval": approval,
+            })
+            if approval == "not_registered":
+                item["reason_ko"] = ("이 인증키로 그 데이터셋이 등록되어 있지 않아 값이 비었습니다"
+                                     "(활용신청이 필요합니다).")
+                if entry.get("apply_url"):
+                    item["apply_url"] = entry["apply_url"]
+            elif approval == "unverified":
+                item["reason_ko"] = ("그 데이터셋의 오퍼레이션 주소를 아직 확인하지 못해 "
+                                     "값이 비었습니다.")
+            elif approval == "approved" and data_state == "sample":
+                item["reason_ko"] = ("내장 샘플 응답이라 실제 값이 아닙니다"
+                                     "(API 승인·인증키 설정 후 채워집니다).")
+            elif approval == "approved" and not key_present and data_source == "index":
+                item["reason_ko"] = ("서버에 인증키가 없어 실시간 재조회를 하지 않았습니다"
+                                     "(색인에 있는 값만 표시).")
+            elif approval == "approved":
+                item["reason_ko"] = ("승인된 데이터셋이지만 이 브랜드·기준연도에 값이 없습니다"
+                                     "(0이라는 뜻은 아닙니다).")
+            else:
+                item["reason_ko"] = "값을 주는 데이터셋의 승인 상태를 확인하지 못했습니다."
+        else:
+            item["reason_ko"] = note_ko or "가맹정보 API 데이터셋에 없는 항목입니다."
+        missing.append(item)
+    return {
+        "scope_ko": ("가장 위 결과 1건 기준입니다." if len(brands) > 1
+                     else "조회 결과 1건 기준입니다."),
+        "brand_code": brand.get("brand_code"),
+        "returned": returned,
+        "null": missing,
+        "meaning_ko": NULL_MEANING_KO,
+    }
 
 
 def lookup(brand_name: str = "", brand_code: str = "", year: Optional[int] = None,
@@ -478,6 +675,12 @@ def lookup(brand_name: str = "", brand_code: str = "", year: Optional[int] = Non
     zero = status == "not_found" or (status == "live" and not brands)
     result["zero_result"] = zero
     result["zero_result_notice_ko"] = ZERO_RESULT_NOTICE_KO
+    result["field_status"] = field_status(
+        brands, result.get("datasets") or [],
+        data_source=str(result.get("data_source") or ""),
+        key_present=bool(service_key(env)),
+        data_state=str(result.get("data_state") or ""))
+    result["null_meaning_ko"] = NULL_MEANING_KO
     return result
 
 
@@ -605,9 +808,28 @@ def _lookup_impl(brand_name: str = "", brand_code: str = "", year: Optional[int]
 def _normalize_all(rows: List[Dict[str, Any]], year: Optional[int]) -> List[Dict[str, Any]]:
     brands = [normalize_brand_row(row, year, "live") for row in rows]
     for brand in brands:
-        if brand.get("closure_rate_3y_pct") is None:
-            brand["closure_rate_3y_pct"] = closure_rate_from_rows(brand) or None
+        _apply_closure(brand)
     return brands
+
+
+def _apply_closure(brand: Dict[str, Any]) -> None:
+    """폐점률이 비어 있으면 연초·연말·변동으로 계산해 근거 문장까지 붙인다."""
+    if brand.get("closure_rate_pct") is not None:
+        return
+    basis = closure_basis(brand)
+    if not basis:
+        return
+    year = brand.get("acntg_year") or brand.get("base_year")
+    brand["closure_rate_pct"] = basis["rate_pct"]
+    brand["start_stores"] = basis["start_stores"]
+    brand["terminated"] = basis["terminated"]
+    brand["cancelled"] = basis["cancelled"]
+    if "new_stores" in basis and brand.get("new_stores") is None:
+        brand["new_stores"] = basis["new_stores"]
+    if "end_stores" in basis and brand.get("stores_year_end") is None:
+        brand["stores_year_end"] = basis["end_stores"]
+    brand["closure_rate_year"] = int(year) if year else None
+    brand["closure_rate_basis_ko"] = _closure_basis_ko(basis, brand["closure_rate_year"])
 
 
 def _scan_brand_rows(client: "FtcClient", endpoint: str, candidate_year: int,
@@ -695,6 +917,8 @@ HQ_FIELD_MAP = (
 )
 # 가맹점 변경현황(15125491) 은 연초·신규·종료·해지·연말 가맹점 수를 준다 → 폐점률 계산.
 STORE_CHANGE_FIELD_MAP = (
+    ("acntgYr", "acntgYr"),
+    ("ystFrcsCnt", "ystFrcsCnt"),
     ("yndFrcsCnt", "frcsCnt"),
     ("newFrcsCnt", "newFrcsCnt"),
     ("ctrtEndFrcsCnt", "ctrtTrmnCnt"),
@@ -709,17 +933,33 @@ STORE_STATS_FIELD_MAP = (
 
 
 def _sum_area_rows(rows: List[Dict[str, Any]]) -> Dict[str, int]:
-    """가맹점 및 직영점 데이터셋(15125490)은 지역(시·도)마다 한 행 — 브랜드 합계로 접는다."""
-    totals = {"frcsCnt": 0, "dmsCnt": 0, "areas": 0}
+    """가맹점 및 직영점 데이터셋(15125490)의 지역 행 → 브랜드 합계.
+
+    이 데이터셋은 시·도 행 17개와 **'전체' 합계 행 1개를 함께** 돌려줍니다. 모두 더하면
+    가맹점 수가 두 배가 됩니다(2026-11-21 실측: `BBQ` 2,316개 → 잘못 4,632개).
+    그래서 '전체' 행이 있으면 **그 값만** 쓰고, 없을 때만 지역 행을 합칩니다.
+    """
+    area_rows: List[Dict[str, Any]] = []
+    total_rows: List[Dict[str, Any]] = []
     for row in rows:
+        area = str(_pick(row, "areaNm") or "").strip()
+        (total_rows if area == STORE_TOTAL_AREA else area_rows).append(row)
+    source_rows = total_rows[:1] if total_rows else area_rows
+    totals = {"frcsCnt": None, "dmsCnt": None, "areas": len(area_rows),
+              "total_row": bool(total_rows)}
+    for row in source_rows:
         value = _num(_pick(row, "frcsCnt"))
         if value is not None:
-            totals["frcsCnt"] += int(value)
+            totals["frcsCnt"] = (totals["frcsCnt"] or 0) + int(value)
         value = _num(_pick(row, "dmsCnt"))
         if value is not None:
-            totals["dmsCnt"] += int(value)
-        totals["areas"] += 1
+            totals["dmsCnt"] = (totals["dmsCnt"] or 0) + int(value)
     return totals
+
+
+def dataset_callable(entry: Dict[str, Any]) -> bool:
+    """이 데이터셋을 실제로 호출해도 되는가 — 승인된 것만 부른다(미등록은 200% 코드 30)."""
+    return bool(entry.get("endpoint")) and str(entry.get("approval") or "") == "approved"
 
 
 def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
@@ -728,7 +968,8 @@ def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
     """승인된 데이터셋으로 본부·가맹점 수·변동을 덧붙인다(실패는 무시, 앞 `limit` 건만).
 
     인증키가 없으면(client=None) 호출 없이 행을 그대로 돌려준다 — 색인만으로 즉시 답한다.
-    호출은 서로 독립이므로 스레드로 함께 보낸다(브랜드 1건 ≈ 0.8초).
+    색인이 이미 가맹점·직영점 합계를 갖고 있으면(`data/brands_index.json.gz`, 15125490) 그 값을
+    그대로 쓰고 호출을 아낀다. 호출은 서로 독립이므로 스레드로 함께 보낸다.
     """
     datasets: List[Dict[str, Any]] = []
     apply_urls: List[str] = []
@@ -739,6 +980,19 @@ def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
     change_entry = index.get("brand_store_change") or {}
     direct_entry = index.get("brand_direct_stores") or {}
 
+    def _dataset_row(entry: Dict[str, Any]) -> Dict[str, Any]:
+        return {key: entry.get(key) for key in
+                ("key", "dataset_id", "title_ko", "approval", "apply_url")}
+
+    # 승인되지 않은 데이터셋은 부르지 않는다(호출 낭비·지연). 대신 근거와 신청 주소를 남긴다.
+    for entry in (hq_entry, store_entry, change_entry, direct_entry):
+        if not entry.get("key") or dataset_callable(entry):
+            continue
+        if _dataset_row(entry) not in datasets:
+            datasets.append(_dataset_row(entry))
+        if entry.get("apply_url") and entry["apply_url"] not in apply_urls:
+            apply_urls.append(entry["apply_url"])
+
     jobs: List[Dict[str, Any]] = []
     for position, row in enumerate(matched):
         if position >= max(0, int(limit)):
@@ -746,19 +1000,28 @@ def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
         year = _pick(row, "jngBizCrtraYr") or ""
         hq_code = _pick(row, "jnghdqrtrsMnno", "hq_code")
         brand_code = _pick(row, "brandMnno", "brand_code")
-        if hq_entry.get("endpoint") and hq_code and not skip_hq:
+        has_hq_name = bool(_pick(row, "corpNm", "jnghdqrtrsNm", "hq_name"))
+        if dataset_callable(hq_entry) and hq_code and not skip_hq and not has_hq_name:
             jobs.append({"position": position, "role": "hq", "entry": hq_entry, "row": row,
                          "params": {"pageNo": 1, "numOfRows": 5, "resultType": "json",
                                     "jngBizCrtraYr": year, "jnghdqrtrsMnno": hq_code}})
-        if brand_code and direct_entry.get("endpoint"):
-            jobs.append({"position": position, "role": "direct", "entry": direct_entry, "row": row,
-                         "params": {"pageNo": 1, "numOfRows": 100, "resultType": "json",
-                                    "jngBizCrtraYr": year, "brandMnno": brand_code}})
-        if brand_code and change_entry.get("endpoint"):
+        if brand_code and dataset_callable(direct_entry):
+            # 색인이 이미 가맹점·직영점 합계를 갖고 있으면 그 값을 쓰고 부르지 않는다.
+            prefilled = (_first_num(row, "frcsCnt") is not None
+                         and _first_num(row, "dmsCnt") is not None)
+            if prefilled:
+                if direct_entry.get("key") and _dataset_row(direct_entry) not in datasets:
+                    datasets.append(_dataset_row(direct_entry))
+            else:
+                jobs.append({"position": position, "role": "direct", "entry": direct_entry,
+                             "row": row,
+                             "params": {"pageNo": 1, "numOfRows": 100, "resultType": "json",
+                                        "jngBizCrtraYr": year, "brandMnno": brand_code}})
+        if brand_code and dataset_callable(change_entry):
             jobs.append({"position": position, "role": "change", "entry": change_entry, "row": row,
                          "params": {"pageNo": 1, "numOfRows": 5, "resultType": "json",
                                     "jngBizCrtraYr": year, "brandMnno": brand_code}})
-        if brand_code and store_entry.get("endpoint"):
+        if brand_code and dataset_callable(store_entry):
             jobs.append({"position": position, "role": "stats", "entry": store_entry, "row": row,
                          "params": {"pageNo": 1, "numOfRows": 5, "resultType": "json",
                                     "jngBizCrtraYr": year, "brandMnno": brand_code}})
@@ -768,11 +1031,8 @@ def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
     enriched = [dict(row) for row in matched]
     for job, response in zip(jobs, responses):
         entry = job["entry"]
-        if entry.get("key"):
-            row = {key: entry.get(key) for key in
-                   ("key", "dataset_id", "title_ko", "approval", "apply_url")}
-            if row not in datasets:
-                datasets.append(row)
+        if entry.get("key") and _dataset_row(entry) not in datasets:
+            datasets.append(_dataset_row(entry))
         merged = enriched[job["position"]]
         code = str(response.get("code") or "")
         rows = response.get("rows") or []
@@ -788,9 +1048,10 @@ def _enrich(client: Optional[FtcClient], matched: List[Dict[str, Any]],
             continue
         merged = enriched[job["position"]]
         if job["role"] == "direct":
-            missing = merged.get("frcsCnt") in (None, "")
+            missing = merged.get("frcsCnt") in (None, "") or merged.get("dmsCnt") in (None, "")
         else:
-            missing = merged.get("ctrtTrmnCnt") in (None, "") or merged.get("frcsCnt") in (None, "")
+            missing = (merged.get("ctrtTrmnCnt") in (None, "")
+                       or merged.get("frcsCnt") in (None, ""))
         previous = _previous_year(job["params"].get("jngBizCrtraYr"))
         if missing and previous:
             retry.append({**job, "params": {**job["params"], "jngBizCrtraYr": previous}})
@@ -836,11 +1097,11 @@ def _apply_enrichment(job: Dict[str, Any], merged: Dict[str, Any],
         return
     if role == "direct":
         totals = _sum_area_rows(rows)
-        if totals["frcsCnt"] and merged.get("frcsCnt") in (None, ""):
+        if totals["frcsCnt"] is not None and merged.get("frcsCnt") in (None, ""):
             merged["frcsCnt"] = str(totals["frcsCnt"])
             merged["stores_source"] = "brand_direct_stores"
             merged["stores_area_count"] = totals["areas"]
-        if totals["dmsCnt"] and merged.get("dmsCnt") in (None, ""):
+        if totals["dmsCnt"] is not None and merged.get("dmsCnt") in (None, ""):
             merged["dmsCnt"] = str(totals["dmsCnt"])
         return
     mapping = STORE_CHANGE_FIELD_MAP if role == "change" else STORE_STATS_FIELD_MAP
@@ -867,5 +1128,5 @@ def health_block() -> Dict[str, Any]:
         "verified_at": summary.get("generated_at"),
         "apply_urls": summary.get("apply_urls") or [],
         "brand_index": {key: index_meta.get(key) for key in
-                        ("available", "count", "year", "built_at", "file")},
+                        ("available", "count", "year", "built_at", "file", "stores")},
     }

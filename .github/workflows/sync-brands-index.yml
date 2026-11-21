@@ -61,11 +61,15 @@ jobs:
           meta = brand_index.meta()
           assert meta["available"], meta
           assert meta["count"] > 5000, meta
+          # 가맹점 및 직영점(15125490) 합계도 색인에 함께 들어야 한다.
+          assert meta["stores"]["available"], meta["stores"]
+          assert meta["stores"]["rows_with_stores"] > 20000, meta["stores"]
           for name in ("BBQ", "교촌", "BHC"):
               result = live_api.lookup(name)
               assert result["status"] == "live", (name, result["status"])
               assert result["brands"], name
-          print("index ok:", meta["count"], meta["year"])
+              assert result["brands"][0].get("stores_year_end") is not None, name
+          print("index ok:", meta["count"], meta["year"], meta["stores"])
           PY
 
       - name: Commit the refreshed index

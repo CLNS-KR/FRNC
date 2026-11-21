@@ -18,7 +18,7 @@ from franchise_kr.version import (SERVICE_NAME, SERVICE_TAGLINE, SERVICE_TITLE_K
 class VersionSyncTest(unittest.TestCase):
     def test_version_format(self):
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
-        self.assertEqual(__version__, "0.1.5")
+        self.assertEqual(__version__, "0.1.6")
 
     def test_server_json_version(self):
         with open(os.path.join(PROJECT, "server.json"), "r", encoding="utf-8") as handle:
@@ -52,6 +52,16 @@ class VersionSyncTest(unittest.TestCase):
 
     def test_schema_version(self):
         self.assertEqual(models.SCHEMA_VERSION, "1.0")
+
+    def test_readme_and_env_example_mention_this_version(self):
+        with open(os.path.join(PROJECT, "README.md"), "r", encoding="utf-8") as handle:
+            readme = handle.read()
+        self.assertIn(f"v{__version__}", readme)
+        with open(os.path.join(PROJECT, ".env.example"), "r", encoding="utf-8") as handle:
+            example = handle.read()
+        for key in ("FRNC_RATE_LIMIT_PER_MINUTE", "FRNC_INQUIRY_WEBHOOK_URL",
+                    "FRNC_INQUIRY_MIRROR", "FRNC_ADMIN_TOKEN"):
+            self.assertIn(key, example, key)
 
 
 if __name__ == "__main__":

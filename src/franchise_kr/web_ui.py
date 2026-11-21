@@ -1052,8 +1052,9 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     if (brand.direct_stores !== null && brand.direct_stores !== undefined) {{
       facts.push("직영 " + Number(brand.direct_stores).toLocaleString("ko-KR") + "개");
     }}
-    if (brand.closure_rate_3y_pct !== null && brand.closure_rate_3y_pct !== undefined) {{
-      facts.push("최근 3년 폐점률 " + brand.closure_rate_3y_pct + "%");
+    if (brand.closure_rate_pct !== null && brand.closure_rate_pct !== undefined) {{
+      facts.push((brand.closure_rate_year ? brand.closure_rate_year + "년 " : "") +
+        "폐점률 " + brand.closure_rate_pct + "%");
     }}
     if (brand.base_year) facts.push(brand.base_year + "년 기준");
     return '<div class="risk"><div class="risk-head"><h4>' + esc(brand.brand_name) + '</h4>' +
@@ -1071,6 +1072,14 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     }}
     if (data.zero_result && data.zero_result_notice_ko) {{
       html += '<p class="notice">' + esc(data.zero_result_notice_ko) + '</p>';
+    }}
+    var status = data.field_status || {{}};
+    var missing = (status.null || []).map(function (item) {{
+      return esc(item.label_ko || item.field);
+    }});
+    if (missing.length) {{
+      html += '<p class="hint">값이 빈 항목: ' + missing.join(" · ") + ' — ' +
+        esc(status.meaning_ko || "") + '</p>';
     }}
     var source = data.data_source === "index" ? "로컬 브랜드 색인(공정위 승인 데이터 전체 페이지)" :
       (data.data_source === "api" ? "공정위 가맹정보 API 실시간 응답" : "내장 샘플(가상 데이터)");

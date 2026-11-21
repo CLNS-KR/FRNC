@@ -171,17 +171,28 @@ class LookupTest(unittest.TestCase):
         self.assertTrue(result["brands"])
 
     def test_enrichment_uses_hq_and_store_endpoints(self):
+        # 본부명이 비어 있는 행만 본부 일반(15125450)을 부른다(이미 있으면 호출을 아낀다).
+        row = {key: value for key, value in BRAND_ROW.items() if key != "corpNm"}
         opener = FakeOpener({
-            "/getBrandinfo": response([BRAND_ROW], "items"),
-            "FftcJnghdqrtrsGnrlDtl3_Service": error_body("30"),
-            "FftcBrandFrcsStatsService": error_body("30"),
+            "/getBrandinfo": response([row], "items"),
+            "FftcJnghdqrtrsGnrlDtl3_Service": response([{"corpNm": "(주)테스트에프앤비"}], "items"),
         })
         client = live_api.FtcClient("dummy-key", opener=opener)
         result = live_api.lookup("테스트치킨", client=client)
         self.assertEqual(result["status"], "live")
-        urls = " ".join(result["apply_urls"])
-        self.assertIn("15125450", urls)
-        self.assertIn("15110241", urls)
+        self.assertEqual(result["brands"][0]["hq_name"], "(주)테스트에프앤비")
+        self.assertTrue(any("FftcJnghdqrtrsGnrlDtl3_Service" in url for url in opener.calls))
+        self.assertIn("15110241", " ".join(result["apply_urls"]))
+
+    def test_unregistered_dataset_is_not_called(self):
+        # 승인되지 않은 데이터셋은 호출하지 않는다(코드 30 이 정해져 있으므로 낭비) — 신청 주소만 남긴다.
+        opener = FakeOpener({"/getBrandinfo": response([BRAND_ROW], "items")})
+        client = live_api.FtcClient("dummy-key", opener=opener)
+        result = live_api.lookup("테스트치킨", client=client)
+        self.assertEqual(result["status"], "live")
+        self.assertFalse(any("FftcBrandFrcsStatsService" in url for url in opener.calls))
+        self.assertIn("15110241", " ".join(result["apply_urls"]))
+        self.assertIn("brand_stores", {row.get("key") for row in result["datasets"]})
 
     def test_key_is_never_in_result(self):
         opener = FakeOpener({"/getBrandinfo": error_body("30")})

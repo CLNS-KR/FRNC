@@ -117,6 +117,21 @@ class Store:
                 row = self.conn.execute("SELECT COUNT(*) AS c FROM inquiries").fetchone()
         return int(row["c"])
 
+    def recent_inquiries(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """최근 접수(관리자 조회용) — 연락처는 회신 목적으로만 돌려준다."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id, day, topic, contact, message, created_at FROM inquiries "
+                "ORDER BY id DESC LIMIT ?", (max(1, min(200, int(limit))),)).fetchall()
+        return [{
+            "receipt": f"F{int(row['id']):05d}",
+            "day": str(row["day"]),
+            "topic": str(row["topic"]),
+            "contact": str(row["contact"]),
+            "message": str(row["message"] or ""),
+            "created_at": str(row["created_at"]),
+        } for row in rows]
+
     def inquiry_topic_counts(self) -> Dict[str, int]:
         with self._lock:
             rows = self.conn.execute(

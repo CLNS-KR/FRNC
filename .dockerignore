@@ -6,3 +6,4 @@
 **/*.pyc
 src/tests
 data/app.sqlite*
+data/*.jsonl

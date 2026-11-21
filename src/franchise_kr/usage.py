@@ -40,6 +40,7 @@ KIND_ZERO_QUERY = "zero_query"
 FLAG_ZERO = "zero_results"
 FLAG_ERROR = "errors"
 FLAG_SAMPLE = "sample_data"
+FLAG_RATE_LIMIT = "rate_limited"
 
 # 0건 조회어 — 남기는 형태를 여기서만 정한다.
 MAX_QUERY_CHARS = 30      # 저장하는 조회어 최대 길이(브리프: 앞 30자)
@@ -48,7 +49,7 @@ TOP_ZERO_QUERIES = 20     # 날짜별로 노출하는 상위 개수(전체 개�
 FIXED_PATHS = (
     "/", "/guides/", "/guides", "/healthz", "/robots.txt", "/llms.txt", "/sitemap.xml",
     "/.well-known/mcp/server-card.json", "/v1/meta", "/v1/mcp", "/v1/stats",
-    "/v1/tools", "/v1/inquiry", "/mcp", "/favicon.ico", "/404",
+    "/v1/tools", "/v1/inquiry", "/v1/inquiries", "/mcp", "/favicon.ico", "/404",
 )
 
 KEY_RE = re.compile(r"[^0-9A-Za-z._:/{}-]")
@@ -195,6 +196,16 @@ def record_request(store: Any, method: str, path: str, day: Optional[str] = None
         pass
 
 
+def record_rate_limited(store: Any, day: Optional[str] = None) -> None:
+    """429 로 끊은 요청 수만 익명으로 센다(어떤 클라이언트인지는 남기지 않는다)."""
+    if store is None:
+        return
+    try:
+        store.bump_usage(day or today_kst(), KIND_FLAG, FLAG_RATE_LIMIT)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def record_tool(store: Any, name: str, result: Any, args: Any = None,
                 day: Optional[str] = None) -> None:
     if store is None:
@@ -303,7 +314,8 @@ def statistics(store: Any, days: int = DEFAULT_DAYS, today: Optional[str] = None
             "note_ko": ("금액·조건 입력은 통계에도 저장하지 않습니다. 브랜드 조회어는 결과가 0건이었을 "
                         "때만 전화번호·이메일·숫자를 지운 형태로 남겨 다음 데이터 확충에 씁니다. "
                         "0건은 '문제없음·안전'이라는 뜻이 아닙니다. 알 수 없는 경로는 /404 한 칸으로 "
-                        "합산하며, 재배포 시 카운터가 초기화될 수 있습니다."),
+                        "합산하며, 요청 제한으로 끊은 요청은 flags.rate_limited 횟수로만 남깁니다. "
+                        "재배포 시 카운터가 초기화될 수 있습니다."),
             "inquiries": {
                 "separate_from_usage": True,
                 "in_this_payload": False,

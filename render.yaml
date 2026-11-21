@@ -29,3 +29,14 @@ services:
         value: /app/data/app.sqlite
       - key: DATA_GO_KR_SERVICE_KEY
         sync: false
+      # 요청 제한(선택) — 비워 두면 기본 240/분 · 문의 30/분
+      - key: FRNC_RATE_LIMIT_PER_MINUTE
+        sync: false
+      - key: FRNC_RATE_WRITE_PER_MINUTE
+        sync: false
+      # 문의 알림·조회(선택) — 무료 플랜은 재시작 때 DB 가 초기화됩니다.
+      # 영구 디스크를 붙이면 FRNC_INQUIRY_MIRROR=/var/data/inquiries.jsonl 도 함께 두세요.
+      - key: FRNC_INQUIRY_WEBHOOK_URL
+        sync: false
+      - key: FRNC_ADMIN_TOKEN
+        sync: false

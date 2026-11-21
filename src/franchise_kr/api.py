@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from . import engine, live_api, models, usage
+from . import engine, live_api, models, notify, usage
 from .version import (DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME, SERVICE_SUBTITLE_EN,
                       SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL, __version__)
 
@@ -428,12 +428,21 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "title_ko": "브랜드 정보공개서 요약",
         "description_ko": (
             "브랜드명(부분 일치) 또는 브랜드관리번호(BRD_...)로 공정거래위원회 가맹정보를 조회해 "
-            "가맹본부·업종·주요상품·가맹사업 개시일·가맹점 수·직영점·최근 3년 폐점률·"
-            "정보공개서 등록번호를 요약합니다. 승인된 브랜드 목록(15125467) 전체 페이지를 받아 만든 "
-            "로컬 색인에서 먼저 찾고(`data_source=index`), 없으면 실시간 API 를 전체 페이지로 다시 "
-            "훑습니다(`data_source=api`). 이름 표기 차이로 못 찾았을 때는 '그 브랜드가 없다'고 "
-            "단정하지 않고 `data_state`·`message_ko`·`apply_urls`(미승인 데이터셋 신청 주소)로 "
-            "근거를 밝힙니다. 판정이 아니므로 실제 값은 가맹사업정보제공시스템에서 확인하세요."
+            "**지금 이 인증키에 승인된 데이터셋이 주는 값만** 요약합니다. "
+            "브랜드명·가맹본부·업종·주요상품·가맹사업 개시일·기준연도·사업자등록번호는 "
+            "브랜드 목록(15125467, 색인 포함), 가맹점 수(자료 회계연도 연말)·직영점 수·지역 수는 "
+            "가맹점 및 직영점(15125490), 연초·신규·계약종료·계약해지와 그로 계산한 "
+            "`closure_rate_pct`(연간)는 가맹점 변경현황(15125491)에서 옵니다. "
+            "가맹점 수는 시·도 행과 '전체' 합계 행 중 '전체' 값을 씁니다(둘을 더하지 않습니다). "
+            "**평균매출액(15110241)·가맹비·교육비·보증금(15110265)·인테리어비(15125479)·"
+            "법 위반 이력(15125463)은 아직 승인되지 않아 null** 이고, 정보공개서 등록번호·등록일은 "
+            "가맹정보 데이터셋에 없습니다. null 은 '0'도 '없음·문제없음'도 아닙니다. 응답의 "
+            "`field_status.null` 이 항목별 사유·데이터셋 번호·활용신청 주소를 밝힙니다. "
+            "폐점률은 '최근 3년'이 아니라 기준연도 전년 대비 1년 변동이며 근거는 "
+            "`closure_rate_basis_ko` 에 있습니다. 색인에서 먼저 찾고(`data_source=index`), "
+            "없으면 실시간 API 를 전체 페이지로 다시 훑으며(`data_source=api`), 이름 표기 차이로 "
+            "못 찾았을 때는 '그 브랜드가 없다'고 단정하지 않고 `data_state`·`message_ko`·"
+            "`apply_urls` 로 근거를 밝힙니다."
         ),
         "handler": tool_lookup_brand_disclosure,
         "input_schema": {
@@ -576,7 +585,11 @@ def submit_inquiry(payload: Any, store: Any = None, day: Optional[str] = None) -
                 "message_ko": usage.INQUIRY_ERRORS_KO.get(code, "문의를 접수하지 못했습니다."),
                 "topics": inquiry_topics()}
     duplicate = bool(saved.get("duplicate"))
-    return {
+    alert = None
+    if not duplicate:
+        day = day or usage.today_kst()
+        alert = notify.deliver(clean, saved.get("receipt"), day, store=store)
+    payload = {
         "ok": True,
         "stored": bool(saved.get("stored")),
         "duplicate": duplicate,
@@ -594,6 +607,9 @@ def submit_inquiry(payload: Any, store: Any = None, day: Optional[str] = None) -
         "topics": inquiry_topics(),
         "checked_at": engine.now_iso(),
     }
+    if alert is not None:
+        payload["alert"] = alert
+    return payload
 
 
 def inquiry_topics() -> List[Dict[str, str]]:
@@ -646,8 +662,10 @@ def text_summary(result: Dict[str, Any]) -> str:
                 facts.append(f"가맹점 {brand['stores_year_end']:,}")
             if brand.get("direct_stores") is not None:
                 facts.append(f"직영 {brand['direct_stores']:,}")
-            if brand.get("closure_rate_3y_pct") is not None:
-                facts.append(f"3년 폐점률 {brand['closure_rate_3y_pct']}%")
+            if brand.get("closure_rate_pct") is not None:
+                year = brand.get("closure_rate_year")
+                facts.append((f"{year}년 " if year else "") +
+                             f"폐점률 {brand['closure_rate_pct']}%")
             if brand.get("avg_sales_krw") is not None:
                 facts.append(f"평균매출 {models.format_krw(brand.get('avg_sales_krw'))}")
             head = " · ".join(part for part in (
@@ -659,6 +677,11 @@ def text_summary(result: Dict[str, Any]) -> str:
             lines.append(f"· {head}" + (" — " + " · ".join(facts) if facts else ""))
         if data.get("message_ko"):
             lines.append(data["message_ko"])
+        status = data.get("field_status") or {}
+        missing = [str(item.get("label_ko") or item.get("field"))
+                   for item in (status.get("null") or []) if isinstance(item, dict)]
+        if missing:
+            lines.append("값이 빈 항목(데이터셋 미승인·미제공, '0'이 아님): " + " · ".join(missing))
         if data.get("zero_result") and data.get("zero_result_notice_ko"):
             lines.append(data["zero_result_notice_ko"])
         return "\n".join(lines)
