@@ -40,8 +40,13 @@ jobs:
                       return r.status, r.read()
               except urllib.error.HTTPError as e:
                   return e.code, e.read()
-          status, _ = get("/healthz")
-          assert status == 200
+          status, body = get("/healthz")
+          assert status == 200 and b"version" in body
+          for page in ("/privacy", "/terms", "/about"):
+              status, body = get(page)
+              assert status == 200 and b"canonical" in body, page
+          status, og = get("/static/og.png")
+          assert status == 200 and og[:8] == b"\x89PNG\r\n\x1a\n"
           request = urllib.request.Request(
               "http://127.0.0.1:8787/mcp",
               data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).encode(),
@@ -57,7 +62,7 @@ jobs:
           assert body["ok"] is True
           assert body["result"]["verdict"]["code"] == "scan_flagged", body["result"]["verdict"]
           assert body["result"]["not_a_clearance_ko"], "0건 안내 문장 누락"
-          assert body["result"]["meta"]["version"] == "0.1.8", body["result"]["meta"]["version"]
+          assert body["result"]["meta"]["version"] == "0.1.9", body["result"]["meta"]["version"]
           assert "가맹금 본사 직접 수령" in json.dumps(body, ensure_ascii=False)
           status, body = get("/guides/")
           assert status == 200

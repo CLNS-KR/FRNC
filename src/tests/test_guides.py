@@ -366,7 +366,8 @@ class GuideFeedsTest(unittest.TestCase):
         self.assertIn("<loc>https://example.com/guides/</loc>", sitemap)
         for guide in guides.GUIDES:
             self.assertIn(f"<loc>https://example.com/guides/{guide['slug']}</loc>", sitemap)
-        self.assertEqual(sitemap.count("<url>"), 19)
+        # 홈 + 가이드 목록 + 가이드 17 + 고지 3(/about·/privacy·/terms, 0.1.9)
+        self.assertEqual(sitemap.count("<url>"), len(guides.GUIDES) + 2 + 3)
 
     def test_llms_lists_guides(self):
         text = static_files.llms_txt("https://example.com")

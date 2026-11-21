@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
-from . import (engine, guides, live_api, mcp, notify, rate_limit, site_verification,
+from . import (engine, guides, legal, live_api, mcp, notify, rate_limit, site_verification,
                static_files, usage)
 from .config import load_dotenv
 from .api import call_tool, mcp_manifest, submit_inquiry
@@ -217,6 +217,17 @@ def make_handler(store: Optional[Store] = None, config: Optional[Dict[str, Any]]
         def _send_html(self, status: int, html: str, cache: str = "no-cache") -> None:
             self._send_text(status, html, "text/html; charset=utf-8", cache)
 
+        def _send_bytes(self, status: int, body: bytes, content_type: str,
+                        cache: str = "public, max-age=86400") -> None:
+            """바이너리 응답(PNG 등) — 텍스트 경로와 같은 헤더 구성을 쓴다."""
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", cache)
+            self._common_headers()
+            self.end_headers()
+            self.wfile.write(body)
+
         def _send_empty(self, status: int) -> None:
             self.send_response(status)
             self.send_header("Content-Length", "0")
@@ -331,6 +342,10 @@ def make_handler(store: Optional[Store] = None, config: Optional[Dict[str, Any]]
                 self._head(200, "application/json; charset=utf-8")
             elif path in ("/robots.txt", "/llms.txt"):
                 self._head(200, "text/plain; charset=utf-8")
+            elif legal.is_page(path):
+                self._head(200, "text/html; charset=utf-8")
+            elif path == "/static/og.png":
+                self._head(200, "image/png")
             elif path == "/sitemap.xml":
                 self._head(200, "application/xml; charset=utf-8")
             elif site_verification.file_body(path) is not None:
@@ -360,7 +375,8 @@ def make_handler(store: Optional[Store] = None, config: Optional[Dict[str, Any]]
             path = urlparse(self.path).path
             if path not in RATE_EXEMPT_PATHS and not self._enforce_rate(self.general_limiter):
                 return
-            usage.record_request(store, "GET", path)
+            usage.record_request(store, "GET", path,
+                                 client=usage.client_class(self.headers.get("User-Agent")))
             try:
                 if path in ("/", "/index.html"):
                     meta = call_tool("get_service_meta", {}, store=store)["result"]["meta"]
@@ -381,6 +397,13 @@ def make_handler(store: Optional[Store] = None, config: Optional[Dict[str, Any]]
                         self._send_html(200, html, cache="public, max-age=600")
                 elif path == "/favicon.ico":
                     self._send_empty(204)
+                elif path == "/static/og.png":
+                    # 공유 미리보기 — 이미지 파일이 없으면 표준 라이브러리로 만든 PNG 를 준다.
+                    self._send_bytes(200, static_files.load_og_image(), "image/png",
+                                     "public, max-age=86400")
+                elif legal.is_page(path):
+                    # /privacy · /terms · /about — 서버 렌더 정적 HTML(JS·외부 CDN 없음).
+                    self._send_html(200, legal.render(path) or "", cache="public, max-age=3600")
                 elif path == "/healthz":
                     self._send_json(200, health_payload(store, self.app_config))
                 elif path == "/robots.txt":
@@ -433,7 +456,8 @@ def make_handler(store: Optional[Store] = None, config: Optional[Dict[str, Any]]
                 return
             if path == INQUIRY_PATH and not self._enforce_rate(self.write_limiter):
                 return
-            usage.record_request(store, "POST", path)
+            usage.record_request(store, "POST", path,
+                                 client=usage.client_class(self.headers.get("User-Agent")))
             if path == INQUIRY_PATH:
                 self._handle_inquiry()
                 return

@@ -528,6 +528,13 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
 <meta property="og:description" content="{SERVICE_TAGLINE} 프랜차이즈 계약 전 위험 신호를 법 조문과 대조해 확인합니다.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{SERVICE_URL}/">
+<meta property="og:image" content="{SERVICE_URL}/static/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FRNC — 프랜차이즈 계약 전 10초 리스크 체크">
+<meta property="og:site_name" content="{SERVICE_NAME}">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="{SERVICE_URL}/">
 {meta_tags}
 <style>{BASE_CSS}</style>
 </head>
@@ -627,6 +634,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     · <a href="/guides/">가이드 {len(guides.GUIDES)}종</a>
     <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
     · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a>
+    <br>고지 — <a href="/privacy">개인정보 처리방침</a> · <a href="/terms">이용약관</a>
+    · <a href="/about">서비스 소개</a>
   </p>
 </div>
 
@@ -1215,6 +1224,8 @@ def render_not_found(path: str = "/", meta: Optional[Dict[str, Any]] = None) -> 
     위법 여부·계약 효력을 확정하지 않습니다. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
     <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
     · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a>
+    <br>고지 — <a href="/privacy">개인정보 처리방침</a> · <a href="/terms">이용약관</a>
+    · <a href="/about">서비스 소개</a>
   </p>
 </div>
 </body>

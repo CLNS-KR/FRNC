@@ -4,7 +4,7 @@ FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="FRNC" \
       org.opencontainers.image.description="Korean franchise disclosure / contract risk check (web UI + JSON API + MCP)" \
-      org.opencontainers.image.version="0.1.8"
+      org.opencontainers.image.version="0.1.9"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -18,6 +18,9 @@ RUN adduser --quiet --disabled-password --shell /usr/sbin/nologin --uid 10001 ap
     && mkdir -p /app/data
 
 COPY --chown=app:app src/ /app/src/
+# 공유 미리보기(og:image) — static/og.png(1200×630). 파일이 없어도 서버는 표준 라이브러리로
+# 만든 대체 PNG 를 내려보내지만, 이미지에 넣어 두면 브랜드 카드가 그대로 나간다.
+COPY --chown=app:app static/ /app/static/
 # 법령 실조회 결과·공정위 API 실측 결과를 함께 넣는다. 서버는 이 파일로 조문 인용과
 # 활용신청 주소를 만든다(런타임에 법령 API 를 부르지 않는다).
 COPY --chown=app:app law-verification.json api-verification-*.json server.json /app/
