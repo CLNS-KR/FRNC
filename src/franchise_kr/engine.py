@@ -720,6 +720,7 @@ def evaluate(terms: Dict[str, Any]) -> Dict[str, Any]:
         row = {
             "trap_id": case["id"],
             "title_ko": case["title_ko"],
+            "check_ko": case.get("check_ko") or case["title_ko"],
             "category": case["category"],
             "category_label_ko": models.CATEGORY_LABELS_KO.get(case["category"], ""),
             "severity": outcome["severity"] or case["severity"],
@@ -735,7 +736,9 @@ def evaluate(terms: Dict[str, Any]) -> Dict[str, Any]:
         if outcome["status"] == "triggered":
             triggered.append(row)
         elif outcome["status"] == "unknown":
-            unknown.append(row)
+            # 모르는 항목은 상황을 단정하지 않는다 — 확인 질문 형태로만 보여 준다.
+            unknown.append({**row, "case_title_ko": case["title_ko"],
+                            "title_ko": case.get("check_ko") or case["title_ko"]})
         else:
             clear.append(row)
     order = {severity: index for index, severity in enumerate(models.SEVERITY_ORDER)}

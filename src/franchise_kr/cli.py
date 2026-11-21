@@ -12,6 +12,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from . import engine, live_api
+from .config import load_dotenv
 
 
 def _print(payload: Any) -> None:
@@ -19,6 +20,7 @@ def _print(payload: Any) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    load_dotenv()  # 로컬 실행 편의 — 배포에서는 환경변수를 그대로 쓴다.
     parser = argparse.ArgumentParser(prog="franchise_kr.cli", description="FRNC 명령줄")
     sub = parser.add_subparsers(dest="command", required=True)
 

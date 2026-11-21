@@ -34,10 +34,11 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from . import engine, guides, live_api, mcp, site_verification, static_files, usage
+from .config import load_dotenv
 from .api import call_tool, mcp_manifest, submit_inquiry
 from .store import Store
 from .version import __version__
-from .web_ui import render_page
+from .web_ui import render_not_found, render_page
 
 MAX_BODY = 64 * 1024
 DEFAULT_HOST = "0.0.0.0"
@@ -207,8 +208,10 @@ def make_handler(store: Optional[Store] = None):
                 self._head(200, "application/xml; charset=utf-8")
             elif site_verification.file_body(path) is not None:
                 self._head(200, "text/html; charset=utf-8")
-            else:
+            elif path.startswith("/v1/") or path.startswith("/mcp"):
                 self._head(404, "application/json; charset=utf-8")
+            else:
+                self._head(404, "text/html; charset=utf-8")
 
         def _head(self, status: int, content_type: str) -> None:
             self.send_response(status)
@@ -277,8 +280,12 @@ def make_handler(store: Optional[Store] = None):
                                     "text/html; charset=utf-8")
                 elif path.rstrip("/") == "/mcp":
                     self._send_method_not_allowed()
-                else:
+                elif path.startswith("/v1/") or path.startswith("/mcp") or path in (
+                        "/healthz", "/v1", "/v1/"):
                     self._send_json(404, {"ok": False, "error": "not_found"})
+                else:
+                    # 사람이 주소를 잘못 친 경우 — JSON 대신 다음에 할 일을 안내한다.
+                    self._send_html(404, render_not_found(path), cache="no-store")
             except Exception:  # noqa: BLE001 - 내부 정보를 노출하지 않는다
                 self._send_json(500, {"ok": False, "error": "internal_error"})
 
@@ -409,6 +416,7 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, db_path: str = "",
 
 
 def main(argv: Optional[list] = None) -> int:
+    load_dotenv()  # 로컬 .env(있을 때만) — 배포에서는 플랫폼 환경변수를 쓴다.
     parser = argparse.ArgumentParser(
         prog="python -m franchise_kr.server",
         description="FRNC 서버 — 프랜차이즈 정보공개서·리스크 체크 (웹 UI + JSON API + MCP)")

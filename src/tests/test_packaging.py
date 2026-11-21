@@ -46,8 +46,11 @@ class RenderTest(unittest.TestCase):
     def test_service_shape(self):
         self.assertIn("runtime: docker", self.text)
         self.assertIn("healthCheckPath: /healthz", self.text)
-        self.assertIn("name: frnc-kr", self.text)
+        # 서비스 이름·공개 주소는 https://frnc.onrender.com 과 일치해야 한다(옛 frnc-kr 금지).
+        self.assertIn("name: frnc\n", self.text)
+        self.assertNotIn("frnc-kr", self.text)
         self.assertIn("PUBLIC_BASE_URL", self.text)
+        self.assertIn("value: https://frnc.onrender.com", self.text)
 
     def test_secret_is_not_inlined(self):
         self.assertIn("DATA_GO_KR_SERVICE_KEY", self.text)
@@ -131,8 +134,10 @@ class ReadmeTest(unittest.TestCase):
             self.assertIn(marker, self.text, marker)
 
     def test_readme_documents_verification_limits(self):
-        self.assertRegex(self.text, r"승인\s*0")
-        self.assertIn("샘플", self.text)
+        # 실측 승인 수(2026-11-21 기준 4/18)와 색인·미승인 데이터셋 한계를 적어 둔다.
+        self.assertIn("승인 4", self.text)
+        self.assertIn("brands_index.json.gz", self.text)
+        self.assertIn("미승인", self.text)
 
     def test_readme_does_not_leak_secrets(self):
         self.assertNotIn("serviceKey=", self.text)

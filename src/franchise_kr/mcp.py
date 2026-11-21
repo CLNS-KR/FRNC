@@ -35,8 +35,10 @@ INSTRUCTIONS_KO = (
     "계약서·특약 문구는 scan_contract_text 로 대조하세요 — 확인이 필요한 문구와 근거 조문, "
     "본부에 요청할 수정 문구를 돌려주며, 0건이어도 '안전'을 뜻하지 않습니다 "
     "(not_a_clearance_ko 를 함께 전달하세요). "
-    "브랜드 조회는 공정위 가맹정보 API 승인 전까지 data_state=sample 로 응답하며 apply_urls 를 "
-    "함께 줍니다. 창업 지원금은 startup_support 의 GRNT 링크로 안내하세요. "
+    "브랜드 조회(lookup_brand_disclosure)는 승인된 가맹정보 데이터셋으로 답하고, 응답의 "
+    "data_state·data_source 가 근거를 밝힙니다. 이름으로 못 찾았을 때는 '없다'고 단정하지 않으며, "
+    "미승인 데이터셋은 apply_urls 로 신청 주소를 함께 줍니다. "
+    "창업 지원금은 startup_support 의 GRNT 링크로 안내하세요. "
     "응답의 disclaimer_ko 와 scope_limits_ko 를 사용자에게 함께 전달하세요."
 )
 

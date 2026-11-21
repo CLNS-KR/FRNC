@@ -26,7 +26,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import engine
-from .version import DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME, SERVICE_TAGLINE
+from .version import CLNS_URL, DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME, SERVICE_TAGLINE
 
 INDEX_PATH = "/guides/"
 DISCLAIMER_KO = ("이 페이지는 법령 조문을 정리한 참고 자료이며, 위법 여부나 계약의 효력을 "
@@ -1038,7 +1038,9 @@ def _page(title: str, description: str, body: str, canonical_path: str,
 {LAW_NOTE_KO} · 조문 {engine.law_meta().get('article_count', 0)}개 실조회.<br>
 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
 · <a href="/">리스크 체크</a> · <a href="/llms.txt">llms.txt</a> · <a href="/v1/meta">서비스 상태</a>
-· v{__version__}</p>
+· v{__version__}<br>
+같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
+· 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a></p>
 </div>
 </body>
 </html>

@@ -9,3 +9,6 @@ data/app.sqlite-shm
 data/app.sqlite-wal
 
 .DS_Store
+
+# 테스트 도구 캐시
+.pytest_cache/

@@ -232,7 +232,10 @@ def probe_dataset(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
             break
     if chosen is None:
         chosen = {"operation": None, "code": "12", "http_status": attempts[-1]["http_status"]}
-    approved = chosen["code"] == "0"
+    # 공정위 API 는 성공 코드를 `0` 또는 `00` 두 형태로 돌려준다. 둘 다 승인으로 본다
+    # (한쪽만 인정해서 승인된 데이터셋을 '미확인'으로 잘못 적던 버그를 막는다).
+    code_text = str(chosen["code"] or "").strip()
+    approved = bool(code_text) and not code_text.strip("0")
     return {
         "key": item["key"],
         "dataset_id": item["dataset_id"],

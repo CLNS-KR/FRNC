@@ -17,9 +17,10 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from . import engine, models, site_verification
-from .version import (DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME, SERVICE_SUBTITLE_EN,
-                      SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL, __version__)
+from . import brand_index, engine, live_api, models, site_verification
+from .version import (CLNS_URL, DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME,
+                      SERVICE_SUBTITLE_EN, SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL,
+                      __version__)
 
 BASE_CSS = """
 :root{
@@ -272,6 +273,15 @@ SELECTS = [
 ]
 
 
+# 선택 항목의 도움말 — SELECTS 한 곳에서만 렌더한다(중복 id·중복 필드 방지).
+SELECT_HINTS = {
+    "payment_route": "예치·피해보상보험 없이 본사 계좌로 보내면 회수 장치가 사라집니다.",
+    "interior_designated": "지정 업체 100% 강제는 구입강제 유형으로 봅니다.",
+    "territory": "독점 영업지역이 계약서에 적혀 있는지가 기준입니다.",
+    "ad_cost_burden": "점주 의무 부담이면 동의 절차·집행 내역 공개 여부를 확인하세요.",
+}
+
+
 def _options(rows: list) -> str:
     return "".join(f'<option value="{value}">{label}</option>' for value, label in rows)
 
@@ -297,7 +307,7 @@ def _select_field(name: str, label: str, rows: list, hint: str = "") -> str:
 
 def _form_html() -> str:
     money_fields = "".join([
-        _field("brand_name", "브랜드명", hint="예: 샘플치킨", extra=' autocomplete="off"'),
+        _field("brand_name", "브랜드명", hint="예: BBQ · 교촌치킨", extra=' autocomplete="off"'),
         _field("industry", "업종", hint="예: 치킨 · 커피 · 편의점", extra=' autocomplete="off"'),
         _field("franchise_fee_krw", "가맹비", hint="예: 1100만원", extra=' inputmode="numeric"'),
         _field("education_fee_krw", "가맹교육비", hint="예: 330만원", extra=' inputmode="numeric"'),
@@ -306,7 +316,8 @@ def _form_html() -> str:
         _field("equipment_krw", "설비·집기", hint="예: 2000만원", extra=' inputmode="numeric"'),
         _field("other_krw", "기타 비용", hint="예: 초도물량·간판", extra=' inputmode="numeric"'),
     ])
-    selects = "".join(_select_field(name, label, rows) for name, label, rows in SELECTS)
+    selects = "".join(_select_field(name, label, rows, SELECT_HINTS.get(name, ""))
+                      for name, label, rows in SELECTS)
     return f"""
 <div class="grid three">
   {money_fields}
@@ -318,8 +329,6 @@ def _form_html() -> str:
           hint="계약서도 같은 숙고기간이 적용됩니다.", extra=' min="0" step="1"')}
   {_select_field("advisor_reviewed", "변호사·가맹거래사 자문", [("", "모름"), ("true", "받음"), ("false", "안 받음")],
                  "자문을 받으면 숙고기간이 7일로 줄어듭니다.")}
-  {_select_field("payment_route", "가맹금 납부 방식", SELECTS[0][2],
-                 "예치·피해보상보험 없이 본사 계좌로 보내면 회수 장치가 사라집니다.")}
   {_field("revenue_claim_ko", "본부가 한 매출 관련 말", hint="예: 월 매출 5천 보장", extra=' autocomplete="off"')}
 
   <div class="full"><h3>계약·영업 조건</h3></div>
@@ -388,6 +397,36 @@ def _scan_card_html() -> str:
 """
 
 
+
+def _brand_card_html() -> str:
+    """브랜드 정보공개서 조회 카드 — 판정 폼과 분리된 입력(조회어는 저장하지 않는다)."""
+    meta = brand_index.meta()
+    if meta.get("available"):
+        scope = (f"등록 브랜드 <b>{int(meta.get('count') or 0):,}건</b> · "
+                 f"{meta.get('year')}년 기준 · 색인 갱신 {str(meta.get('built_at'))[:10]}")
+    else:
+        scope = "브랜드 색인 미설치 — 실시간 API 로 조회합니다."
+    return f"""
+<section class="card" id="brand-card">
+  <h2>브랜드 정보공개서 조회</h2>
+  <p class="sub">브랜드명(부분 일치)이나 브랜드관리번호(BRD_...)로 공정위 가맹정보에서 조회합니다.
+    본부·업종·가맹사업 개시일·가맹점 수·폐점률을 보여 주고, 정보공개서 원문은 가맹사업정보제공시스템에서
+    확인하도록 안내합니다. <span class="hint">{scope}</span></p>
+  <form id="brand-search" novalidate>
+    <div class="grid">
+      <label class="field"><span class="lab">브랜드명<span class="opt">부분 일치 · 예: BBQ</span></span>
+        <input id="brand-q" type="text" autocomplete="off" placeholder="예: BBQ · 교촌 · 메가커피"></label>
+      <div class="field"><span class="lab">조회<span class="opt">Enter 로도 실행</span></span>
+        <button type="submit" class="primary" id="brand-run">브랜드 조회</button></div>
+    </div>
+  </form>
+  <div class="status" id="brand-status" aria-live="polite"></div>
+  <div id="brand-result" hidden></div>
+  <p class="hint">조회어는 저장하지 않습니다. 결과가 0건일 때만 전화번호·이메일을 지운 뒤 익명 횟수로 남깁니다.
+    0건은 '등록된 브랜드가 없다'도 '문제없다·안전하다'도 아닙니다.</p>
+</section>
+"""
+
 def _inquiry_html() -> str:
     topics = "".join(
         f'<option value="{topic}">{label}</option>'
@@ -444,14 +483,10 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     from . import guides
 
     meta = meta or {}
-    data_state = str(meta.get("data_state") or "sample")
+    data_state = str(meta.get("data_state") or live_api.data_state())
     law = engine.law_meta()
-    state_note = (
-        "브랜드 조회는 공정위 가맹정보 API 활용신청 승인 전이라 내장 샘플로 동작합니다. "
-        "판정(리스크 체크)은 입력한 조건과 실조회한 법 조문으로 그대로 계산됩니다."
-        if data_state != "live" else
-        "공정위 가맹정보 API 실데이터로 동작합니다."
-    )
+    # 실제 동작을 그대로 적는다 — '승인 전이라 샘플' 같은 고정 문구를 쓰지 않는다.
+    state_note = live_api.state_note_ko(state=data_state)
     presets_json = json.dumps({preset["id"]: preset["values"] for preset in PRESETS},
                               ensure_ascii=False)
     scan_samples_json = json.dumps({row["id"]: row["text"] for row in SCAN_SAMPLES},
@@ -504,6 +539,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     <p class="sub">자주 오는 네 가지 상황입니다. 누르면 조건이 채워지고 바로 판정합니다.</p>
     <div class="presets">{_presets_html()}</div>
   </section>
+
+  {_brand_card_html()}
 
   <form class="card" id="check" novalidate>
     <h2>조건 입력</h2>
@@ -567,6 +604,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     최종 판단은 변호사·가맹거래사 자문으로 하세요. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
     · <a href="/llms.txt">llms.txt</a> · <a href="/v1/meta">서비스 상태</a>
     · <a href="/guides/">가이드 {len(guides.GUIDES)}종</a>
+    <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
+    · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a>
   </p>
 </div>
 
@@ -988,10 +1027,156 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
   }});
   scanCount();
 
+  // --- 브랜드 정보공개서 조회 --------------------------------------------
+  var brandForm = $("brand-search");
+  var brandInput = $("brand-q");
+  var brandStatusEl = $("brand-status");
+  var brandResultEl = $("brand-result");
+
+  function fmtDate(value) {{
+    var text = String(value === null || value === undefined ? "" : value);
+    return text.length === 8 ? text.slice(0, 4) + "-" + text.slice(4, 6) + "-" + text.slice(6) : text;
+  }}
+
+  function brandHit(brand) {{
+    var bits = [];
+    if (brand.hq_name) bits.push("본부 " + esc(brand.hq_name));
+    var industry = [brand.industry_large, brand.industry_mid].filter(Boolean).join(" · ");
+    if (industry) bits.push(esc(industry));
+    if (brand.main_product) bits.push("주요상품 " + esc(brand.main_product));
+    var facts = [];
+    if (brand.started_on) facts.push("가맹사업 개시 " + esc(fmtDate(brand.started_on)));
+    if (brand.stores_year_end !== null && brand.stores_year_end !== undefined) {{
+      facts.push("가맹점 " + Number(brand.stores_year_end).toLocaleString("ko-KR") + "개");
+    }}
+    if (brand.direct_stores !== null && brand.direct_stores !== undefined) {{
+      facts.push("직영 " + Number(brand.direct_stores).toLocaleString("ko-KR") + "개");
+    }}
+    if (brand.closure_rate_3y_pct !== null && brand.closure_rate_3y_pct !== undefined) {{
+      facts.push("최근 3년 폐점률 " + brand.closure_rate_3y_pct + "%");
+    }}
+    if (brand.base_year) facts.push(brand.base_year + "년 기준");
+    return '<div class="risk"><div class="risk-head"><h4>' + esc(brand.brand_name) + '</h4>' +
+      '<span class="kbd">' + esc(brand.brand_code || "") + '</span></div>' +
+      '<p class="why">' + bits.join(" · ") + '</p>' +
+      '<p class="hint">' + facts.join(" · ") + '</p></div>';
+  }}
+
+  function brandRender(data) {{
+    var brands = data.brands || [];
+    var html = '<p class="summary">' + esc(data.message_ko || "") + '</p>';
+    if (brands.length) {{
+      html += '<div class="section"><h3>조회 결과 <span class="count">' + brands.length +
+        '건</span></h3>' + brands.map(brandHit).join("") + '</div>';
+    }}
+    if (data.zero_result && data.zero_result_notice_ko) {{
+      html += '<p class="notice">' + esc(data.zero_result_notice_ko) + '</p>';
+    }}
+    var source = data.data_source === "index" ? "로컬 브랜드 색인(공정위 승인 데이터 전체 페이지)" :
+      (data.data_source === "api" ? "공정위 가맹정보 API 실시간 응답" : "내장 샘플(가상 데이터)");
+    html += '<p class="hint">데이터 근거: ' + esc(source) + ' · 상태 ' + esc(data.status) + '</p>';
+    html += '<p class="hint"><a href="' + esc(data.disclosure_portal || "https://franchise.ftc.go.kr") +
+      '" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템에서 정보공개서 원문 확인</a></p>';
+    brandResultEl.innerHTML = html;
+    brandResultEl.hidden = false;
+  }}
+
+  function brandLookup() {{
+    if (!brandInput) return;
+    var query = String(brandInput.value || "").trim().slice(0, 60);
+    if (!query) {{
+      brandStatusEl.className = "status err";
+      brandStatusEl.textContent = "브랜드명이나 브랜드관리번호를 넣어 주세요.";
+      return;
+    }}
+    var payload = /^brd_/i.test(query) ? {{brand_code: query}} : {{brand_name: query}};
+    var button = $("brand-run");
+    brandStatusEl.className = "status";
+    brandStatusEl.textContent = "공정위 가맹정보에서 찾는 중…";
+    button.disabled = true;
+    fetch("/v1/tools/lookup_brand_disclosure", {{
+      method: "POST", headers: {{"Content-Type": "application/json"}},
+      body: JSON.stringify(payload)
+    }}).then(function (response) {{
+      return response.json().then(function (body) {{ return {{ok: response.ok, body: body}}; }});
+    }}).then(function (out) {{
+      if (!out.ok || !out.body || out.body.ok === false) {{
+        throw new Error((out.body && (out.body.message || out.body.error)) || "조회에 실패했습니다.");
+      }}
+      brandRender(out.body.result);
+      brandStatusEl.textContent = "조회 완료. 확정 정보가 아니므로 정보공개서 원문과 대조하세요.";
+    }}).catch(function (error) {{
+      brandStatusEl.className = "status err";
+      brandStatusEl.textContent = "오류: " + error.message;
+    }}).finally(function () {{
+      button.disabled = false;
+    }});
+  }}
+
+  if (brandForm) {{
+    brandForm.addEventListener("submit", function (event) {{ event.preventDefault(); brandLookup(); }});
+  }}
+
   moneySum();
   prefillFromUrl();
 }})();
 </script>
+</body>
+</html>
+"""
+
+
+def render_not_found(path: str = "/", meta: Optional[Dict[str, Any]] = None) -> str:
+    """사람이 보는 404 페이지 — JSON 대신 다음에 할 일을 준다(비-`/v1/` 경로 전용)."""
+    from . import guides
+
+    safe_path = str(path or "/")[:120]
+    safe_path = (safe_path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                 .replace('"', "&quot;"))
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 — {SERVICE_NAME} 페이지를 찾지 못했습니다</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1f4fd8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0f16" media="(prefers-color-scheme: dark)">
+<style>{BASE_CSS}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">FR</div>
+      <div>
+        <h1>{SERVICE_NAME} · {SERVICE_TITLE_KO}</h1>
+        <p>{SERVICE_TAGLINE}</p>
+        <p class="en">{SERVICE_SUBTITLE_EN}</p>
+      </div>
+    </div>
+    <div><span class="pill">v{__version__}</span><span class="pill ghost">404</span></div>
+  </header>
+
+  <section class="card" style="margin-top:14px">
+    <h2>요청한 페이지를 찾지 못했습니다</h2>
+    <p class="sub">주소 <span class="kbd">{safe_path}</span> 는 이 서비스에 없습니다.
+      아래에서 원하는 화면으로 이동하세요. 기계용 경로(<span class="kbd">/v1/…</span>)는 JSON 으로 응답합니다.</p>
+    <ul class="clean">
+      <li><a href="/">내 조건으로 10초 체크</a> — 브랜드·금액·조건으로 위험 신호 확인</li>
+      <li><a href="/#brand-card">브랜드 정보공개서 조회</a> — 브랜드명(부분 일치)·브랜드관리번호로 조회</li>
+      <li><a href="/guides/">질문형 가이드 {len(guides.GUIDES)}종</a> — 숙고기간·가맹금·영업지역·해지·갱신</li>
+      <li><a href="/v1/meta">서비스·데이터 상태</a> · <a href="/llms.txt">llms.txt</a> · <a href="/healthz">healthz</a></li>
+    </ul>
+  </section>
+
+  <p class="foot">
+    {SERVICE_NAME}는 입력한 조건과 공개 법령 조문을 대조하는 참고용 사전 점검 도구입니다.
+    위법 여부·계약 효력을 확정하지 않습니다. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
+    <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
+    · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a>
+  </p>
+</div>
 </body>
 </html>
 """

@@ -1,0 +1,82 @@
+name: sync-brands-index
+
+# 브랜드 색인(data/brands_index.json.gz) 갱신 — 공정위 가맹정보 브랜드 목록(15125467) 전체 페이지.
+#
+# 왜 주 1회인가
+#   가맹정보의 기준연도 데이터는 연 단위로 바뀌고, 신규 등록 브랜드는 등록 시점에 목록에 들어옵니다.
+#   일 1회까지 돌릴 필요는 없지만, 새 브랜드가 한 달씩 빠지지 않도록 주 1회로 둡니다.
+#   (일 1회로 조이려면 cron 을 "0 20 * * *" 로 바꾸면 됩니다. 실행 시간 약 2~3분 · 약 48회 호출.)
+#
+# 필요한 시크릿
+#   DATA_GO_KR_SERVICE_KEY — 공공데이터포털 가맹정보 API 인증키. 없으면 경고만 남기고 건너뜁니다.
+on:
+  schedule:
+    # 매주 월요일 05:00 KST (UTC 일요일 20:00)
+    - cron: "0 20 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-brands-index
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the API key secret
+        id: gate
+        env:
+          DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+        run: |
+          if [ -z "${DATA_GO_KR_SERVICE_KEY}" ]; then
+            echo "::warning::DATA_GO_KR_SERVICE_KEY 시크릿이 없어 색인 갱신을 건너뜁니다."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build brand index
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          PYTHONPATH: src
+          DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+        run: python -m tools.sync_brands_index
+
+      - name: Verify the index reads back and known brands resolve
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from franchise_kr import brand_index, live_api
+          meta = brand_index.meta()
+          assert meta["available"], meta
+          assert meta["count"] > 5000, meta
+          for name in ("BBQ", "교촌", "BHC"):
+              result = live_api.lookup(name)
+              assert result["status"] == "live", (name, result["status"])
+              assert result["brands"], name
+          print("index ok:", meta["count"], meta["year"])
+          PY
+
+      - name: Commit the refreshed index
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          git config user.name "frnc-index-bot"
+          git config user.email "frnc-index-bot@example.com"
+          git add data/brands_index.json.gz
+          if git diff --cached --quiet; then
+            echo "색인 변경 없음 — 커밋하지 않습니다."
+          else
+            git commit -m "chore(index): refresh brand index ($(date -u +%Y-%m-%d))"
+            git push
+          fi

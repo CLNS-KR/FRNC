@@ -4,7 +4,7 @@
 |---|---|
 | `check_franchise_risk` | 가맹 조건 → 위험 신호·판정·체크리스트·법 조문·지원금 연결 |
 | `scan_contract_text` | 계약서·특약 문구 → 확인이 필요한 문구·근거 조문·수정 요청 문구 |
-| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(공정위 API 실시간 또는 내장 샘플) |
+| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(로컬 브랜드 색인 → 실시간 API → 샘플) |
 | `compare_franchise_terms` | 두 프랜차이즈(또는 두 제안 조건) 비교 |
 | `list_risk_cases` | 함정 코퍼스 17건 목록(조문 대조 여부 포함) |
 | `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
@@ -52,7 +52,7 @@ def _envelope(tool: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 def _meta_block() -> Dict[str, Any]:
     from . import guides
 
-    summary = live_api.dataset_summary()
+    health = live_api.health_block()
     return {
         "service": SERVICE_NAME,
         "version": __version__,
@@ -63,8 +63,10 @@ def _meta_block() -> Dict[str, Any]:
             "subtitle_en": SERVICE_SUBTITLE_EN,
             "url": SERVICE_URL,
         },
-        "data_state": "sample" if summary["counts"]["approved"] == 0 else "live",
-        "live_api": live_api.health_block(),
+        "data_state": live_api.data_state(),
+        "data_note_ko": live_api.state_note_ko(),
+        "live_api": health,
+        "brand_index": health.get("brand_index"),
         "law": engine.law_meta(),
         "trap_cases": len(engine.trap_cases()),
         "privacy": {
@@ -147,14 +149,15 @@ def _lookup_questions(result: Dict[str, Any]) -> List[str]:
     status = result.get("status")
     if status == "not_approved":
         return [
-            "공공데이터포털에서 가맹정보 API 활용신청을 승인받았나요?",
+            "응답의 apply_urls 에서 아직 승인되지 않은 데이터셋을 확인했나요?",
             "가맹사업정보제공시스템(franchise.ftc.go.kr)에서 정보공개서 등록번호를 확인했나요?",
         ]
-    if status == "not_found":
-        return ["브랜드명을 더 짧게 넣거나 브랜드관리번호(BRD_...)로 조회해 보세요."]
+    if status in ("not_found", "partial_scan"):
+        return ["브랜드명을 더 짧게 넣거나 브랜드관리번호(BRD_...)로 조회해 보세요.",
+                "직영으로만 운영하는 브랜드는 가맹 브랜드 목록에 없을 수 있습니다. 본사에 직접 확인했나요?"]
     if status in ("live", "sample"):
         return [
-            "최근 3년 가맹점 변동(신규·계약종료·계약해지)을 확인했나요?",
+            "최근 3년 가맹점 변동(신규·계약종료·계약해지)을 정보공개서 원문에서 확인했나요?",
             "인근 가맹점 2~3곳에서 실제 매출 상황을 들었나요?",
         ]
     return ["공정거래위원회 API 승인 상태를 확인했나요?"]
@@ -424,11 +427,13 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "name": "lookup_brand_disclosure",
         "title_ko": "브랜드 정보공개서 요약",
         "description_ko": (
-            "브랜드명 또는 브랜드관리번호로 공정거래위원회 가맹정보 데이터를 조회해 "
-            "가맹본부·업종·가맹사업 개시일·가맹점 수·계약종료/해지·평균매출액·정보공개서 등록번호를 "
-            "요약합니다. 이 키는 가맹정보 API 활용신청이 승인되지 않아 지금은 내장 **샘플**로 "
-            "응답하며 `data_state` 와 `apply_urls`(활용신청 주소)를 함께 돌려줍니다. "
-            "승인 전에는 화면의 구조만 참고하고, 실제 값은 가맹사업정보제공시스템에서 확인하세요."
+            "브랜드명(부분 일치) 또는 브랜드관리번호(BRD_...)로 공정거래위원회 가맹정보를 조회해 "
+            "가맹본부·업종·주요상품·가맹사업 개시일·가맹점 수·직영점·최근 3년 폐점률·"
+            "정보공개서 등록번호를 요약합니다. 승인된 브랜드 목록(15125467) 전체 페이지를 받아 만든 "
+            "로컬 색인에서 먼저 찾고(`data_source=index`), 없으면 실시간 API 를 전체 페이지로 다시 "
+            "훑습니다(`data_source=api`). 이름 표기 차이로 못 찾았을 때는 '그 브랜드가 없다'고 "
+            "단정하지 않고 `data_state`·`message_ko`·`apply_urls`(미승인 데이터셋 신청 주소)로 "
+            "근거를 밝힙니다. 판정이 아니므로 실제 값은 가맹사업정보제공시스템에서 확인하세요."
         ),
         "handler": tool_lookup_brand_disclosure,
         "input_schema": {
@@ -633,11 +638,25 @@ def text_summary(result: Dict[str, Any]) -> str:
     if tool == "lookup_brand_disclosure":
         status = data.get("status")
         brands = data.get("brands") or []
-        lines = [f"상태: {status} · 데이터: {data.get('data_state')}"]
+        lines = [f"상태: {status} · 데이터: {data.get('data_state')}"
+                 f"({data.get('data_source')})"]
         for brand in brands[:3]:
-            lines.append(f"· {brand.get('brand_name')} / {brand.get('hq_name')} "
-                         f"({brand.get('industry_mid')}) 가맹점 {brand.get('stores_year_end')} · "
-                         f"평균매출 {models.format_krw(brand.get('avg_sales_krw'))}")
+            facts = []
+            if brand.get("stores_year_end") is not None:
+                facts.append(f"가맹점 {brand['stores_year_end']:,}")
+            if brand.get("direct_stores") is not None:
+                facts.append(f"직영 {brand['direct_stores']:,}")
+            if brand.get("closure_rate_3y_pct") is not None:
+                facts.append(f"3년 폐점률 {brand['closure_rate_3y_pct']}%")
+            if brand.get("avg_sales_krw") is not None:
+                facts.append(f"평균매출 {models.format_krw(brand.get('avg_sales_krw'))}")
+            head = " · ".join(part for part in (
+                str(brand.get("brand_name") or ""),
+                str(brand.get("hq_name") or ""),
+                f"({brand.get('industry_mid')})" if brand.get("industry_mid") else "",
+                f"[{brand.get('brand_code')}]" if brand.get("brand_code") else "",
+            ) if part)
+            lines.append(f"· {head}" + (" — " + " · ".join(facts) if facts else ""))
         if data.get("message_ko"):
             lines.append(data["message_ko"])
         if data.get("zero_result") and data.get("zero_result_notice_ko"):

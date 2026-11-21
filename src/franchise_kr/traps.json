@@ -5,6 +5,7 @@
     {
       "id": "same_day_contract",
       "title_ko": "정보공개서 받은 당일 계약서 서명·가맹금 입금",
+      "check_ko": "정보공개서·계약서를 받은 뒤 14일(자문 시 7일)을 지켰는지 확인했나요?",
       "category": "cooling_off",
       "severity": "high",
       "trigger_ko": "정보공개서(또는 가맹계약서)를 받은 날부터 14일이 지나기 전에 계약하거나 가맹금을 냄",
@@ -27,6 +28,7 @@
     {
       "id": "revenue_verbal_guarantee",
       "title_ko": "구두로 '월 매출 보장' 약속, 서면 산정서 없음",
+      "check_ko": "매출 관련 말을 서면(예상매출액 산정서·산출근거)으로도 받았는지 확인했나요?",
       "category": "revenue",
       "severity": "high",
       "trigger_ko": "매출·수익을 구두로 약속했는데 서면 예상매출액 산정서나 산출근거를 받지 못함",
@@ -47,6 +49,7 @@
     {
       "id": "payment_to_hq_account",
       "title_ko": "가맹금을 본사 계좌로 직접 송금하라고 요구",
+      "check_ko": "가맹금을 예치기관 예치·피해보상보험으로 내는지 확인했나요?",
       "category": "payment",
       "severity": "high",
       "trigger_ko": "가맹금을 예치기관이 아닌 본부 계좌로 직접 보내라고 함",
@@ -68,6 +71,7 @@
     {
       "id": "interior_forced",
       "title_ko": "인테리어·집기를 본사 지정 업체로 100% 강제",
+      "check_ko": "인테리어·집기 업체를 직접 고를 수 있는지 확인했나요?",
       "category": "interior",
       "severity": "high",
       "trigger_ko": "인테리어·설비·집기를 본사가 지정한 업체에서만 하도록 강제",
@@ -93,6 +97,7 @@
     {
       "id": "no_territory",
       "title_ko": "계약서에 영업지역이 없거나 보호되지 않음",
+      "check_ko": "계약서에 영업지역(행정동·반경)과 독점 여부가 적혀 있는지 확인했나요?",
       "category": "territory",
       "severity": "high",
       "trigger_ko": "영업지역(행정동·반경)이 계약서에 없거나, 같은 지역에 추가 출점이 가능하다고 함",
@@ -114,6 +119,7 @@
     {
       "id": "closure_rate_hidden",
       "title_ko": "최근 3년 폐점·계약해지 급증을 말해 주지 않음",
+      "check_ko": "최근 3년 가맹점 수·계약종료·계약해지 수를 문서로 받았는지 확인했나요?",
       "category": "disclosure",
       "severity": "high",
       "trigger_ko": "최근 3년 폐점률이 15% 이상이거나, 가맹점 증감·해지 현황을 문서로 받지 못함",
@@ -135,6 +141,7 @@
     {
       "id": "legal_violation_hidden",
       "title_ko": "본부의 법 위반·시정조치 이력을 확인하지 않음",
+      "check_ko": "본부의 공정위 시정조치·과징금·형벌선고 이력을 확인했나요?",
       "category": "disclosure",
       "severity": "high",
       "trigger_ko": "공정위 시정조치·과징금·형벌선고 이력을 확인하지 않았거나 숨김",
@@ -155,6 +162,7 @@
     {
       "id": "no_escrow",
       "title_ko": "가맹금 예치·피해보상보험 없음",
+      "check_ko": "가맹금 예치·피해보상보험 증서를 받았는지 확인했나요?",
       "category": "payment",
       "severity": "high",
       "trigger_ko": "가맹금 예치도, 가맹점사업자피해보상보험계약도 없다고 함",
@@ -176,6 +184,7 @@
     {
       "id": "excessive_penalty",
       "title_ko": "중도해지 위약금이 투자금의 20% 이상",
+      "check_ko": "중도해지 위약금의 기준과 금액을 확인했나요?",
       "category": "penalty",
       "severity": "medium",
       "trigger_ko": "중도해지 위약금이 총투자금의 20% 이상(40% 이상이면 위험 높음)",
@@ -200,6 +209,7 @@
     {
       "id": "mandatory_purchase",
       "title_ko": "필수품목·판매목표 강제",
+      "check_ko": "꼭 사야 하는 품목과 판매목표가 정해져 있는지 확인했나요?",
       "category": "purchase",
       "severity": "medium",
       "trigger_ko": "본사 지정 품목을 의무 구매하게 하거나 월 판매목표를 강제",
@@ -224,6 +234,7 @@
     {
       "id": "price_fixing",
       "title_ko": "판매가격을 본사가 정하고 지키게 함",
+      "check_ko": "판매가격을 점주가 정할 수 있는지 확인했나요?",
       "category": "pricing",
       "severity": "medium",
       "trigger_ko": "메뉴·상품 가격을 본사가 정하고 할인·변경을 제한",
@@ -248,6 +259,7 @@
     {
       "id": "ad_cost",
       "title_ko": "광고·판촉비를 점주가 일방 부담",
+      "check_ko": "광고·판촉비를 누가 얼마나 부담하는지, 집행 내역을 볼 수 있는지 확인했나요?",
       "category": "advertising",
       "severity": "low",
       "trigger_ko": "본사가 정한 광고·판촉 비용을 점주가 의무 부담",
@@ -268,6 +280,7 @@
     {
       "id": "renewal_terms",
       "title_ko": "계약갱신이 보장되지 않거나 10년을 넘김",
+      "check_ko": "갱신 요구 기간·거절 사유·전체 계약기간 상한을 확인했나요?",
       "category": "renewal",
       "severity": "medium",
       "trigger_ko": "갱신 거절 사유가 넓거나, 최초 계약을 포함한 전체 기간이 10년을 넘음",
@@ -288,6 +301,7 @@
     {
       "id": "termination_no_grace",
       "title_ko": "해지 시 유예기간 없이 즉시 종료",
+      "check_ko": "해지 유예기간(2개월)과 서면 2회 통지 절차를 확인했나요?",
       "category": "termination",
       "severity": "medium",
       "trigger_ko": "본부가 위반을 이유로 유예기간 없이 즉시 해지할 수 있다고 함",
@@ -309,6 +323,7 @@
     {
       "id": "disclosure_not_registered",
       "title_ko": "정보공개서 등록번호를 확인하지 않음",
+      "check_ko": "정보공개서 등록번호·등록일을 확인했나요?",
       "category": "registration",
       "severity": "medium",
       "trigger_ko": "정보공개서 등록번호·등록일을 받지 못했거나 확인하지 않음",
@@ -330,6 +345,7 @@
     {
       "id": "essential_items_margin",
       "title_ko": "필수품목 과다 지정·단가 미공개·차액가맹금 일방 인상",
+      "check_ko": "필수품목 단가·차액가맹금을 서면으로 받았는지 확인했나요?",
       "category": "purchase",
       "severity": "high",
       "trigger_ko": "필수품목 목록만 있고 품목별 공급가격·산정기준이 없거나, 일반 공산품까지 필수품목으로 지정하거나, 차액가맹금을 일방적으로 올림",
@@ -359,6 +375,7 @@
     {
       "id": "resale_price_maintenance",
       "title_ko": "판매가격 구속·재판매가격 유지 강요",
+      "check_ko": "판매가격 변경·할인 권한이 점주에게 있는지 확인했나요?",
       "category": "pricing",
       "severity": "medium",
       "trigger_ko": "본부가 판매가격을 정해 지키게 하거나, 할인·가격 변경을 막거나, 권장가격 준수를 의무로 두거나, 가격 위반에 제재를 둠",

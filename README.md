@@ -57,16 +57,16 @@
 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)은 이름은 맞지만 이 인증키가 해당 서비스에
 등록되지 않았다는 뜻입니다. 2026-11-21 실측(`api-verification-2026-11-21.json`):
 
-- 호출 시도 **18개** → 키 미등록(30) **17개**, 오퍼레이션 미확인(12) **1개**, 승인 **0개**
+- 호출 시도 **18개** → **승인 4개** · 키 미등록(30) **13개** · 오퍼레이션 미확인(12) **1개**
 - 문서 열람형(LINK) **3개**(정보공개서 목록·목차·본문)는 REST 오퍼레이션이 공개되어 있지 않음
 
 | 데이터셋 | 식별자 | 오퍼레이션 | 상태 |
 |---|---|---|---|
-| 브랜드 목록 | 15125467 | `getBrandinfo` | 키 미등록 |
-| 가맹본부 일반 정보 | 15125450 | `getjnghdqrtrsGnlinfo2` | 키 미등록 |
+| 브랜드 목록 | 15125467 | `getBrandinfo` | **승인** |
+| 가맹본부 일반 정보 | 15125450 | `getjnghdqrtrsGnlinfo2` | **승인** |
+| 브랜드 가맹점 및 직영점 | 15125490 | `getbrandFrcsDmsstus2` | **승인** |
+| 브랜드 가맹점 변경현황 | 15125491 | `getbrandFrcsFlctnstus` | **승인** |
 | 브랜드별 가맹점 현황(평균매출) | 15110241 | `getBrandFrcsStats` | 키 미등록 |
-| 브랜드 가맹점 및 직영점 | 15125490 | `getbrandFrcsDmsstus2` | 키 미등록 |
-| 브랜드 가맹점 변경현황 | 15125491 | `getbrandFrcsFlctnstus` | 키 미등록 |
 | 브랜드별 창업 금액 | 15110265 | `getBrandFntnStats` | 키 미등록 |
 | 인테리어 비용 | 15125479 | `getbrandFrcsBzmnIntrrctinfo` | 키 미등록 |
 | 가맹금 정보 | 15125476 | `getbrandFrcsJnntinfo` | 키 미등록 |
@@ -82,10 +82,35 @@
 | 단위면적당 평균매출 | 15125494 | (오퍼레이션 미확인) | 미확인 |
 | 정보공개서 목록·목차·본문 | 15125569·15125570·15125571 | LINK | 문서 열람 |
 
-**활용신청이 필요한 주소**는 각 `https://www.data.go.kr/data/{식별자}/openapi.do` 입니다.
-서버는 신청 상태를 하드코딩하지 않고, 응답의 `apply_urls` 와 `/v1/meta` 의
-`data_sources.apply_urls` 로 알려 줍니다. 승인 전에는 브랜드 조회가 **내장 샘플**
-(`data_state: "sample"`)로 동작하고, **판정 자체는 법령 조문만으로 그대로 계산**됩니다.
+아직 등록되지 않은 데이터셋의 **활용신청 주소**는 `https://www.data.go.kr/data/{식별자}/openapi.do`
+이고, 서버는 신청 상태를 하드코딩하지 않고 응답의 `apply_urls` 와 `/v1/meta` 의
+`data_sources.apply_urls` 로 알려 줍니다.
+
+#### 브랜드 색인 — `getBrandinfo` 에는 이름 검색 파라미터가 없습니다
+
+`brandNm` 을 붙여도 무시되고 `pageNo`/`numOfRows` 로만 훑을 수 있습니다(2026-11-21 실측).
+그래서 예전 코드는 1페이지 100건만 뒤져 `BBQ`·`교촌` 같은 브랜드를 못 찾았습니다.
+지금은 **전체 페이지를 받아 색인**을 만들고, 조회는 그 색인을 먼저 봅니다.
+
+| 항목 | 값 |
+|---|---|
+| 색인 파일 | `data/brands_index.json.gz` (약 1.9MB 압축, 저장소·이미지에 포함) |
+| 수집 연도 | 2026·2025·2024·2023 (연도별 1만 건대, `numOfRows=1000` × 11~12페이지) |
+| 브랜드 수 | 44,567건(연도 중복 포함) · 이름·관리번호로 즉시 검색 |
+| 갱신 | `src/tools/sync_brands_index.py` + `.github/workflows/sync-brands-index.yml` (**주 1회**, 월 05:00 KST) |
+| 색인 신선도 | 45일 이내면 이름 미매칭을 확정으로 보고 실시간 순회를 생략(느린 전체 순회 방지) |
+
+```bash
+PYTHONPATH=src python -m tools.sync_brands_index          # 최근 4개 연도 → data/brands_index.json.gz
+PYTHONPATH=src python -m tools.sync_brands_index --check   # 네트워크 없이 색인 상태만
+```
+
+조회 순서는 ① **로컬 색인** ② **실시간 API 전체 페이지**(색인이 오래됐거나 관리번호로 조회할 때)
+③ **내장 샘플** 이고, 응답의 `data_state`(live/sample)와 `data_source`(index/api/sample)가
+근거를 밝힙니다. 색인으로 찾은 브랜드에는 승인된 가맹점 데이터셋에서 **가맹점 수·직영점 수·
+최근 3년 폐점률**을 덧붙입니다(예: `BBQ` 4,632개 · 폐점률 3.3%, 2026-11-21 조회).
+못 찾았을 때는 "그 브랜드가 없다"고 단정하지 않고, 색인 규모·기준연도와 함께 표기 차이·
+직영 브랜드 가능성을 안내합니다.
 
 ## 3. 빠른 실행
 
@@ -94,13 +119,16 @@ cd projects/franchise-kr
 PYTHONPATH=src python -m franchise_kr.server          # http://localhost:8787
 PYTHONPATH=src python -m franchise_kr.cli check --brand 샘플치킨 --days 0 --payment hq_account
 PYTHONPATH=src python -m franchise_kr.cli law "제7조"
-PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 332 tests
+PYTHONPATH=src python -m unittest discover -s src/tests -t src/tests   # 373 tests(색인 포함)
+PYTHONPATH=src python -m tools.sync_brands_index                        # 브랜드 색인 갱신(키 필요)
 ```
 
 의존성 설치 단계가 없습니다(표준 라이브러리만). Python 3.12 기준.
 
 ### 환경변수
-`.env.example` 참고. `DATA_GO_KR_SERVICE_KEY` 는 선택이며, 없으면 샘플로 동작합니다.
+`.env.example` 참고. `DATA_GO_KR_SERVICE_KEY` 는 선택입니다. 로컬에서는 프로젝트 루트의
+`.env`(gitignore)를 서버·CLI 진입점이 읽고, 없으면 색인만으로 동작합니다(가맹점 수·변동은 생략).
+`FRNC_BRANDS_INDEX` 로 색인 파일 경로를 바꿀 수 있습니다.
 `LAW_GO_KR_OC` 는 `law-verification.json` 을 다시 만들 때만 씁니다(서버는 쓰지 않음).
 
 ### 검증 자료 재생성
@@ -197,7 +225,7 @@ DATA_GO_KR_SERVICE_KEY=<키> PYTHONPATH=src python -m tools.verify_ftc_apis  # �
 |---|---|
 | `check_franchise_risk` | 조건 → 위험 신호·판정·질문·체크리스트·법 조문·GRNT 연결 |
 | `scan_contract_text` | 계약서·특약 문구 → 확인 필요 문구·원문 인용·근거 조문·수정 요청 문구 |
-| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(실시간 또는 샘플 + 신청 주소) |
+| `lookup_brand_disclosure` | 브랜드 1건 정보공개서 요약(로컬 색인 → 실시간 API → 샘플, `data_source` 로 근거 표시) |
 | `compare_franchise_terms` | 두 프랜차이즈 조건 비교(비용·절차·위험 신호) |
 | `list_risk_cases` | 함정 코퍼스 17건(위험도·분류·키워드 필터, 조문 대조 여부) |
 | `get_law_article` | 실조회한 가맹사업법·시행령 조문 원문 |
@@ -220,10 +248,12 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 
 - `GET /healthz` · `/v1/meta` · `/v1/stats` · `/v1/mcp` · `/llms.txt` · `/sitemap.xml`
 - `POST /v1/tools/{tool}` · `POST /v1/inquiry`(문의)
-- 웹 UI `GET /` — 원클릭 프리셋 4개(당일 계약·본사 송금 / 구두 매출 보장 / 인테리어 100% 강제 /
-  정상 조건), **특약·계약서 문구 1초 스캔 카드(샘플 3종)**, 결과 요약 복사, 비식별 공유 링크
+- 웹 UI `GET /` — **브랜드 정보공개서 조회 카드**(`/#brand-card`, 브랜드명 부분 일치·관리번호),
+  원클릭 프리셋 4개(당일 계약·본사 송금 / 구두 매출 보장 / 인테리어 100% 강제 / 정상 조건),
+  **특약·계약서 문구 1초 스캔 카드(샘플 3종)**, 결과 요약 복사, 비식별 공유 링크
   복사(`/?brand=...#check` 프리필), 다크 모드, 모바일 반응형. 공유 링크에는 **브랜드명만** 담고
   금액·조건·연락처는 담지 않습니다.
+- 없는 주소(비-`/v1/`)는 JSON 이 아니라 **사람용 404 안내 페이지**를 돌려줍니다(다음에 할 일 링크).
 - 질문형 가이드 `GET /guides/` · `GET /guides/{slug}` — 17종. 각 페이지는 한 줄 답, 법이 정한
   기준, 계약 전 체크포인트, 흔한 오해, FAQ, 근거 조문 원문을 담고 `FAQPage`·`BreadcrumbList`·
   `WebPage` JSON-LD 를 포함합니다. `/guides` 는 `/guides/` 로 301.
@@ -254,9 +284,9 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 ## 6. 배포
 
 - `Dockerfile`: `python:3.12-slim`, 비루트 사용자, `HEALTHCHECK /healthz`, 표준 라이브러리만
-- `render.yaml`: Render Blueprint(도커, free, singapore, `/healthz`), `DATA_GO_KR_SERVICE_KEY`
-  는 `sync: false`(대시보드에서 입력)
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.3)
+- `render.yaml`: Render Blueprint(도커, free, singapore, `/healthz`) — 서비스 이름 `frnc`,
+  공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.5, 설명 100자 이하)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`
@@ -266,14 +296,17 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 
 1. **확정 판정이 아니다.** 입력한 조건과 공개 조문의 대조일 뿐, 위법 여부·계약 효력을
    판단하지 않습니다. 계약서 검토·법률 자문·신고 대행을 하지 않습니다.
-2. 브랜드 실데이터는 공정위 가맹정보 API 활용신청이 승인되어야 합니다. 2026-11-21 현재
-   이 키는 가맹정보 API 18개 중 승인 0개이며, 그래서 화면과 응답의 `data_state` 는
-   `sample` 입니다. 승인 후 첫 호출에서 응답 봉투가 문서와 다르면 `unexpected_shape` 로
-   남기고 **0건으로 단정하지 않습니다**.
+2. 브랜드 조회는 승인된 데이터셋(18개 중 4개)으로 답합니다. 브랜드명·본부·업종·가맹사업
+   개시일은 색인(승인 15125467)에서, 가맹점 수·직영점·최근 3년 폐점률은 승인된 15125490·15125491
+   에서 옵니다. **평균매출(15110241)·창업비용·법 위반 이력은 아직 미승인**이라 값이 비고
+   `apply_urls` 로 신청 주소를 안내합니다. 서버에 인증키가 없으면 색인만으로 답하고
+   (`data_state=live`, 가맹점 수 생략) 이 사실을 화면·응답에 적습니다.
+   응답 봉투가 문서와 다르면 `unexpected_shape` 로 남기고 **0건으로 단정하지 않습니다**.
 3. 정보공개서 목록·목차·본문(15125569·15125570·15125571)은 data.go.kr 제공형태가 LINK라
    REST 로 부를 수 없습니다. 본문은 가맹사업정보제공시스템에서 열람해야 합니다.
 4. 단위면적당 평균매출(15125494)은 오퍼레이션 이름을 확인하지 못해 `unverified` 로 남겼습니다.
-5. 폐점률은 3년 변동 자료가 있을 때 계산하며, 자료가 없으면 '모름'으로 두고 질문합니다.
+5. 폐점률은 3년 변동 자료(15125491)가 있을 때 계산하고, 자료가 없으면 '모름'으로 두고 묻습니다.
+   색인의 브랜드 수는 연도별 목록을 합친 값이라 실제 브랜드 수와 다릅니다(중복 포함).
 6. 문구 스캔은 정규식 규칙이 표시된 패턴만 찾습니다. 잡히지 않은 문구를 '적법'으로,
    잡힌 문구를 '위법'으로 단정하지 않습니다. 문장 구조를 해석하는 모델이 아니라,
    사람이 확인할 목록을 빠짐없이 같은 기준으로 만들어 주는 도구입니다.
@@ -284,5 +317,6 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 - 가맹정보: 공정거래위원회 가맹정보 오픈API (`apis.data.go.kr/1130000`, data.go.kr)
 - 정보공개서 원문: 가맹사업정보제공시스템 (`franchise.ftc.go.kr`)
 - 창업 지원금: GRNT (`https://grnt-kr.onrender.com/`)
+- 같이 쓰는 도구: 수입·유통 규제 체크 CLNS (`https://clns-kr.onrender.com/`)
 
 MIT License.

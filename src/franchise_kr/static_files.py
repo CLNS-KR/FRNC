@@ -12,10 +12,11 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from . import engine, live_api
+from . import brand_index, engine, live_api
 from .api import mcp_tools
-from .version import (DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME, SERVICE_SUBTITLE_EN,
-                      SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL, __version__)
+from .version import (CLNS_URL, DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME,
+                      SERVICE_SUBTITLE_EN, SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL,
+                      __version__)
 
 DEFAULT_BASE_URL = SERVICE_URL
 
@@ -57,12 +58,18 @@ def llms_txt(base: Optional[str] = None) -> str:
     law = engine.law_meta()
     from . import guides
 
+    index_meta = brand_index.meta()
+    if index_meta.get("available"):
+        index_line = (f"> 브랜드 색인: {int(index_meta.get('count') or 0):,}건 · "
+                      f"{index_meta.get('year')}년 기준 · 색인 갱신 {str(index_meta.get('built_at'))[:10]} "
+                      "(공정위 가맹정보 브랜드 목록 15125467 전체 페이지 수집, 이름 검색용)")
+    else:
+        index_line = "> 브랜드 색인: 미설치 — 조회할 때마다 API 전체 페이지를 훑습니다."
     state_line = (
-        f"> 데이터: 공정위 가맹정보 API 승인 {counts['approved']}/{counts['total']} · "
-        f"미등록 {counts['not_registered']} — 지금은 브랜드 조회가 **내장 샘플**로 동작합니다. "
-        "실제 값은 가맹사업정보제공시스템에서 확인하세요."
-        if counts["approved"] == 0 else
-        f"> 데이터: 공정위 가맹정보 API 승인 {counts['approved']}/{counts['total']} — 실데이터로 동작합니다."
+        f"> 데이터: 공정위 가맹정보 API 승인 {counts['approved']}/{counts['total']} "
+        f"(미등록 {counts['not_registered']} · 미확인 {counts['unverified']}).\n"
+        f"> {live_api.state_note_ko()}\n"
+        f"{index_line}"
     )
     return f"""# {SERVICE_NAME} — {SERVICE_TITLE_KO}
 
@@ -76,6 +83,8 @@ def llms_txt(base: Optional[str] = None) -> str:
 ## 사람용
 - [내 조건으로 10초 체크]({root}/): 로그인·회원가입·개인정보 입력 없이 브랜드·금액·조건만 고릅니다.
   원클릭 프리셋 4개(당일 계약·본사 계좌 송금 / 구두 매출 보장 / 인테리어 100% 강제 / 정상 조건).
+- [브랜드 정보공개서 조회]({root}/#brand-card): 브랜드명(부분 일치)이나 브랜드관리번호(BRD_...)로
+  등록 브랜드를 찾아 본부·업종·가맹사업 개시일·가맹점 수·폐점률을 확인합니다.
 - [계약서·특약 문구 스캔]({root}/): 본부가 보낸 특약 문구를 붙여넣으면 확인이 필요한 문구와
   본부에 요청할 수정 문구를 짚어 줍니다. 샘플 3종(구입강제·과중 위약금·즉시 해지) 버튼.
 - [질문형 가이드 {len(guides.GUIDES)}종]({root}/guides/): 정보공개서 14일 숙고기간, 예상매출액 산정서,
@@ -110,11 +119,15 @@ def llms_txt(base: Optional[str] = None) -> str:
 - `low_risk`: 8개 핵심 축이 모두 채워졌고 그 안에서 위험 신호가 없음. **확정 아님** —
   서류 원문·현장 확인은 따로 필요합니다.
 - 0건·미발견 응답에는 고정 안내가 붙습니다: 0건은 '그 브랜드가 없다'도 '문제없다·안전하다'도 아닙니다.
-- 브랜드 조회는 공정위 가맹정보 API 활용신청 승인 전까지 내장 샘플(`data_state=sample`)로 응답합니다.
-  응답의 `apply_urls` 가 활용신청 주소입니다.
+- 브랜드 조회는 **전체 등록 브랜드 색인**(승인된 15125467)을 먼저 보고, 없으면 실시간 API 를
+  전체 페이지로 다시 훑습니다. 응답의 `data_state`(live/sample)·`data_source`(index/api/sample)가
+  근거를 밝히고, 이름으로 못 찾았을 때는 '그 브랜드가 없다'고 단정하지 않습니다.
+  아직 승인되지 않은 데이터셋은 `apply_urls` 로 활용신청 주소를 함께 돌려줍니다.
+- 브랜드 조회는 사람용 화면에서도 같은 툴로 바로 됩니다: `GET /` 의 "브랜드 정보공개서 조회" 카드.
 - 창업비용을 낸 뒤 받을 수 있는 지원금은 GRNT({GRANT_URL})에서 확인하세요.
+- 같이 쓰는 도구: 수입·유통 규제 체크 CLNS({CLNS_URL}) — 같은 팀이 만든 자매 서비스입니다.
 - 이 서비스는 계약서 검토·법률 자문·신고 대행을 하지 않습니다. 최종 판단은 변호사·가맹거래사 자문으로.
-- 정보공개서 원문: {DISCLOSURE_PORTAL}
+- 정보공개서 원문: 가맹사업정보제공시스템 {DISCLOSURE_PORTAL}
 {guides.llms_section(root)}"""
 
 

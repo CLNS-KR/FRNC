@@ -1,11 +1,11 @@
 {
- "generated_at": "2026-11-21T01:46:10+09:00",
+ "generated_at": "2026-11-21T09:23:27+09:00",
  "provider": "공정거래위원회 가맹정보 (data.go.kr 1130000)",
  "note_ko": "각 데이터셋의 오퍼레이션을 실제 호출해 응답 코드를 기록했습니다. 코드 30 은 오퍼레이션이 존재하지만 이 인증키가 해당 서비스에 등록되지 않았다는 뜻이고, 코드 12 는 오퍼레이션 이름이 존재하지 않는다는 뜻입니다(추측 금지 확인용). 인증키 값은 파일에 남기지 않았습니다.",
  "counts": {
   "total": 18,
-  "approved": 0,
-  "not_registered": 17,
+  "approved": 4,
+  "not_registered": 13,
   "unverified": 1,
   "link_only": 3
  },
@@ -18,16 +18,16 @@
    "service": "FftcBrandRlsInfo2_Service",
    "endpoint": "https://apis.data.go.kr/1130000/FftcBrandRlsInfo2_Service/getBrandinfo",
    "operation": "getBrandinfo",
-   "approval": "not_registered",
-   "code": "30",
-   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "approval": "approved",
+   "code": "00",
+   "code_hint_ko": "",
    "apply_url": "https://www.data.go.kr/data/15125467/openapi.do",
    "attempts": [
     {
      "operation": "getBrandinfo",
-     "http_status": 403,
-     "code": "30",
-     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+     "http_status": 200,
+     "code": "00",
+     "message": "{\"resultCode\":\"00\",\"resultMsg\":\"NORMAL SERVICE\",\"numOfRows\":\"2\",\"pageNo\":\"1\",\"totalCount\":11683,\"items\":[{\"jngBizCrtraYr\":\"2024\",\"brandMnno\":\"BRD_20120100318\",\"jnghdqrtrsMnno\":\"JNG_001186\",\"brno\":\"1138669236\",\"crno\":\"110"
     }
    ]
   },
@@ -39,16 +39,16 @@
    "service": "FftcJnghdqrtrsGnrlDtl3_Service",
    "endpoint": "https://apis.data.go.kr/1130000/FftcJnghdqrtrsGnrlDtl3_Service/getjnghdqrtrsGnlinfo2",
    "operation": "getjnghdqrtrsGnlinfo2",
-   "approval": "not_registered",
-   "code": "30",
-   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "approval": "approved",
+   "code": "00",
+   "code_hint_ko": "",
    "apply_url": "https://www.data.go.kr/data/15125450/openapi.do",
    "attempts": [
     {
      "operation": "getjnghdqrtrsGnlinfo2",
-     "http_status": 403,
-     "code": "30",
-     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+     "http_status": 200,
+     "code": "00",
+     "message": "{\"resultCode\":\"00\",\"resultMsg\":\"NORMAL SERVICE\",\"numOfRows\":\"2\",\"pageNo\":\"1\",\"totalCount\":8261,\"items\":[{\"jngBizCrtraYr\":\"2024\",\"jnghdqrtrsMnno\":\"JNG_000292\",\"jnghdqrtrsConmNm\":\"진푸드서비스\",\"brno\":\"4053100913\",\"crno\":null,\"i"
     }
    ]
   },
@@ -81,16 +81,16 @@
    "service": "FftcBrandFrcsDropInfo3_Service",
    "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsDropInfo3_Service/getbrandFrcsDmsstus2",
    "operation": "getbrandFrcsDmsstus2",
-   "approval": "not_registered",
-   "code": "30",
-   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "approval": "approved",
+   "code": "00",
+   "code_hint_ko": "",
    "apply_url": "https://www.data.go.kr/data/15125490/openapi.do",
    "attempts": [
     {
      "operation": "getbrandFrcsDmsstus2",
-     "http_status": 403,
-     "code": "30",
-     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+     "http_status": 200,
+     "code": "00",
+     "message": "{\"resultCode\":\"00\",\"resultMsg\":\"NORMAL SERVICE\",\"numOfRows\":\"2\",\"pageNo\":\"1\",\"totalCount\":18,\"items\":[{\"jngBizCrtraYr\":\"2024\",\"brandMnno\":\"BRD_20080100007\",\"jnghdqrtrsMnno\":\"JNG_000002\",\"acntgYr\":\"2023\",\"indutyLclasNm\":\""
     }
    ]
   },
@@ -102,16 +102,16 @@
    "service": "FftcBrandFrcsChghst2_Service",
    "endpoint": "https://apis.data.go.kr/1130000/FftcBrandFrcsChghst2_Service/getbrandFrcsFlctnstus",
    "operation": "getbrandFrcsFlctnstus",
-   "approval": "not_registered",
-   "code": "30",
-   "code_hint_ko": "인증키가 이 서비스에 등록되지 않음 — 활용신청 필요",
+   "approval": "approved",
+   "code": "00",
+   "code_hint_ko": "",
    "apply_url": "https://www.data.go.kr/data/15125491/openapi.do",
    "attempts": [
     {
      "operation": "getbrandFrcsFlctnstus",
-     "http_status": 403,
-     "code": "30",
-     "message": "{ \"OpenAPI_ServiceResponse\": { \"cmmMsgHeader\": { \"errMsg\": \"SERVICE_KEY_IS_NOT_REGISTERED_ERROR\", \"returnAuthMsg\": \"등록되지 않은 서비스키\", \"returnReasonCode\": \"30\" } } }"
+     "http_status": 200,
+     "code": "00",
+     "message": "{\"resultCode\":\"00\",\"resultMsg\":\"NORMAL SERVICE\",\"numOfRows\":\"2\",\"pageNo\":\"1\",\"totalCount\":1,\"items\":[{\"jngBizCrtraYr\":\"2024\",\"brandMnno\":\"BRD_20080100007\",\"jnghdqrtrsMnno\":\"JNG_000002\",\"acntgYr\":\"2023\",\"indutyLclasNm\":\"도"
     }
    ]
   },
@@ -427,20 +427,16 @@
  "apply_urls": [
   "https://www.data.go.kr/data/15110241/openapi.do",
   "https://www.data.go.kr/data/15110265/openapi.do",
-  "https://www.data.go.kr/data/15125450/openapi.do",
   "https://www.data.go.kr/data/15125452/openapi.do",
   "https://www.data.go.kr/data/15125463/openapi.do",
   "https://www.data.go.kr/data/15125464/openapi.do",
   "https://www.data.go.kr/data/15125466/openapi.do",
-  "https://www.data.go.kr/data/15125467/openapi.do",
   "https://www.data.go.kr/data/15125471/openapi.do",
   "https://www.data.go.kr/data/15125475/openapi.do",
   "https://www.data.go.kr/data/15125476/openapi.do",
   "https://www.data.go.kr/data/15125479/openapi.do",
   "https://www.data.go.kr/data/15125480/openapi.do",
   "https://www.data.go.kr/data/15125484/openapi.do",
-  "https://www.data.go.kr/data/15125490/openapi.do",
-  "https://www.data.go.kr/data/15125491/openapi.do",
   "https://www.data.go.kr/data/15125517/openapi.do"
  ]
 }
