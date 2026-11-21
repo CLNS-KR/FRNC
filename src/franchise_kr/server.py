@@ -145,7 +145,7 @@ def health_payload(store: Optional[Store] = None,
         "law_articles": law.get("article_count", 0),
         "law_effective": [law_ for law_ in (law.get("laws") or [])],
         "live_api": live,
-        "inquiries": usage.inquiry_summary(store),
+        "inquiries": usage.inquiry_summary(store, include_cohort=False),
         "alerts": notify.status(cfg.get("env")),
         "rate_limit": {
             "per_minute": int(cfg.get("rate_limit_per_minute") or 0),

@@ -165,7 +165,7 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(payload["verdict"]["code"], "scan_flagged")
         self.assertTrue(payload["findings"])
         self.assertIn("필요합니다", payload["not_a_clearance_ko"])
-        self.assertEqual(payload["meta"]["version"], "0.1.6")
+        self.assertEqual(payload["meta"]["version"], "0.1.7")
 
         status, body = self.post("/v1/tools/scan_contract_text", {
             "text": "가맹금은 예치기관에 예치한다. 본부는 2개월 이상의 유예기간을 둔다."})

@@ -273,6 +273,12 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
 
 - `GET /healthz` · `/v1/meta` · `/v1/stats` · `/v1/mcp` · `/llms.txt` · `/sitemap.xml`
 - `POST /v1/tools/{tool}` · `POST /v1/inquiry`(문의) · `GET /v1/inquiries`(문의 조회, `X-Admin-Token` 필요)
+- 문의(`/v1/inquiry`)는 `contact`·`topic`·`message` 외에 **선택** 필드 `cohort`(별칭 `source`)를 받습니다 —
+  무료 베타·소개 글 유입 구분 태그(`beta_pilot`, `citechart` 등 영문 소문자·숫자와 `._:-`, 40자).
+  없으면 종전과 동일하게 동작하고, 있으면 `inquiries.cohort`ㆍ미러 JSONLㆍ웹훅ㆍ`/v1/inquiries`
+  요약(`by_cohort`)에 남습니다. 공개 `/v1/stats`·`/healthz` 에는 넣지 않습니다.
+  웹 문의 폼도 `/?cohort=beta_pilot` 처럼 태그가 붙은 링크로 들어오면 그 값을 함께 보냅니다
+  (형식이 틀리면 보내지 않음).
 - 요청 제한: 넘으면 `429` + `Retry-After`(기본 분당 240회, 문의 분당 30회, `/healthz` 예외).
   IP 는 저장하지 않고 프로세스 난수로 해시한 메모리 키만 씁니다(재배포 시 초기화).
 - 웹 UI `GET /` — **브랜드 정보공개서 조회 카드**(`/#brand-card`, 브랜드명 부분 일치·관리번호),
@@ -322,7 +328,7 @@ curl -s http://localhost:8787/v1/tools/check_franchise_risk -H 'Content-Type: ap
   공개 주소 `https://frnc.onrender.com`. `DATA_GO_KR_SERVICE_KEY` 는 `sync: false`(대시보드에서 입력).
   문의를 오래 보관하려면 유료 영구 디스크를 붙이고 `FRNC_INQUIRY_MIRROR`(예: `/var/data/inquiries.jsonl`)와
   `FRNC_ADMIN_TOKEN` 을 함께 설정하세요(free 플랜은 재시작 때 DB 가 바뀝니다).
-- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.6, 설명 100자 이하)
+- `server.json`: MCP 레지스트리 매니페스트(`io.github.CLNS-KR/frnc`, v0.1.7, 설명 100자 이하)
 - `.github/workflows/publish-mcp-registry.yml`: `v*` 태그 push(또는 수동 실행) 때
   `mcp-publisher` 로 공식 레지스트리에 게시합니다. GitHub Actions OIDC 로 인증해
   조직 네임스페이스를 쓰고, 게시 전에 단위 테스트·`server.json` 버전 대조·원격 `/mcp`

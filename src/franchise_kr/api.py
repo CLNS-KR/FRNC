@@ -596,6 +596,7 @@ def submit_inquiry(payload: Any, store: Any = None, day: Optional[str] = None) -
         "receipt": saved.get("receipt"),
         "topic": clean["topic"],
         "topic_label_ko": usage.INQUIRY_TOPIC_LABELS[clean["topic"]],
+        "cohort": clean.get("cohort") or "",
         "message_ko": ("같은 내용이 이미 접수되어 있습니다. 회신드리겠습니다." if duplicate else
                        "접수됐습니다. 남겨 주신 연락처로만 회신드립니다."),
         "privacy": {

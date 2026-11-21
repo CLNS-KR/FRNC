@@ -427,6 +427,25 @@ def _brand_card_html() -> str:
 </section>
 """
 
+def _siblings_html() -> str:
+    """같이 쓰는 서비스 — CLNS(수입·유통)·GRNT(정부지원금)로 가는 한 줄 생태계 링크.
+
+    세 서비스 모두 무료ㆍ회원가입 없음이다. 외부 링크는 새 탭 + noopener 로 연다.
+    (CLNSㆍGRNT 화면의 '같이 쓰는 서비스' 카드와 같은 문구를 쓴다.)
+    """
+    return f"""
+<section class="card" id="siblings">
+  <h2>같이 쓰는 서비스</h2>
+  <p class="sub">같은 팀이 무료로 운영하는 두 도구입니다. 세 서비스 모두 회원가입ㆍ결제가 없고,
+  판정은 공정위ㆍ정부가 공개한 원본 자료로만 합니다.</p>
+  <ul class="clean">
+    <li><a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer"><b>CLNS</b></a> — 수입ㆍ유통 규제 체크(세관장확인ㆍKCㆍ식약처ㆍ리콜)</li>
+    <li><a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer"><b>GRNT</b></a> — 개인ㆍ창업 정부지원금 판정기(보조금24ㆍK-Startupㆍ기업마당)</li>
+  </ul>
+</section>
+"""
+
+
 def _inquiry_html() -> str:
     topics = "".join(
         f'<option value="{topic}">{label}</option>'
@@ -595,6 +614,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     <ul class="clean">{_guides_teaser_html()}</ul>
     <p class="hint"><a href="/guides/">가이드 전체 {len(guides.GUIDES)}종 보기</a></p>
   </section>
+
+  {_siblings_html()}
 
   {_inquiry_html()}
 
@@ -878,6 +899,15 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     statusEl.textContent = "공유 링크에서 브랜드명만 채웠습니다. 금액·조건을 넣고 10초 체크를 눌러 주세요.";
   }}
 
+  // 무료 베타·소개 글 유입 태그(0.1.7) — ?cohort=beta_pilot 로 들어온 링크만 문의에 붙인다.
+  // 서버와 같은 규칙(영문 소문자·숫자와 . _ : -, 40자)을 먼저 확인해 잘못된 값이면 보내지 않는다.
+  function cohortTag() {{
+    try {{
+      var value = String(new URLSearchParams(location.search).get("cohort") || "").trim().toLowerCase();
+      return /^[a-z0-9][a-z0-9._:-]{{0,39}}$/.test(value) ? value : "";
+    }} catch (error) {{ return ""; }}
+  }}
+
   var inquiry = $("inquiry");
   inquiry.addEventListener("submit", function (event) {{
     event.preventDefault();
@@ -885,7 +915,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     var payload = {{
       contact: $("inq-contact").value,
       topic: $("inq-topic").value,
-      message: $("inq-message").value
+      message: $("inq-message").value,
+      cohort: cohortTag()
     }};
     status.className = "status";
     status.textContent = "보내는 중…";

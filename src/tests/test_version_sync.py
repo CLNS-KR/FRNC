@@ -18,7 +18,7 @@ from franchise_kr.version import (SERVICE_NAME, SERVICE_TAGLINE, SERVICE_TITLE_K
 class VersionSyncTest(unittest.TestCase):
     def test_version_format(self):
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
-        self.assertEqual(__version__, "0.1.6")
+        self.assertEqual(__version__, "0.1.7")
 
     def test_server_json_version(self):
         with open(os.path.join(PROJECT, "server.json"), "r", encoding="utf-8") as handle:

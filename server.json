@@ -3,7 +3,7 @@
   "name": "io.github.CLNS-KR/frnc",
   "title": "FRNC — Korean Franchise Disclosure Risk Check",
   "description": "Korean franchise disclosure and contract clause risk checks with verified statute text.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "websiteUrl": "https://frnc.onrender.com/",
   "repository": {
     "url": "https://github.com/CLNS-KR/FRNC",

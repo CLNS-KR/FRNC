@@ -88,6 +88,7 @@ def _entry(clean: Dict[str, Any], receipt: Optional[str], day: str) -> Dict[str,
         "contact": clean.get("contact"),
         "message": message,
         "created_at": _now(),
+        "cohort": str(clean.get("cohort") or ""),
     }
 
 
@@ -139,6 +140,7 @@ def webhook_payload(clean: Dict[str, Any], receipt: Optional[str], day: str,
     message = str(clean.get("message") or "")
     preview = message[:PREVIEW_CHARS]
     topic = str(clean.get("topic") or "")
+    cohort = str(clean.get("cohort") or "")
     payload: Dict[str, Any] = {
         "event": "frnc.inquiry",
         "service": "frnc",
@@ -152,13 +154,17 @@ def webhook_payload(clean: Dict[str, Any], receipt: Optional[str], day: str,
         "contact_included": bool(cfg.get("webhook_contact")),
         "checked_at": _now(),
         "text": (f"[FRNC] 새 문의 {receipt or '(번호 없음)'} · {topic}"
+                 + (f" · {cohort}" if cohort else "")
                  + (f" · {preview}" if preview else "")
                  + " — 연락처는 관리자 조회(/v1/inquiries)에서 확인하세요."),
     }
+    if cohort:
+        payload["cohort"] = cohort
     if cfg.get("webhook_contact") and clean.get("contact"):
         payload["contact"] = clean.get("contact")
-        payload["text"] = (f"[FRNC] 새 문의 {receipt or '(번호 없음)'} · {topic} · "
-                           f"{clean.get('contact')}" + (f" · {preview}" if preview else ""))
+        payload["text"] = (f"[FRNC] 새 문의 {receipt or '(번호 없음)'} · {topic}"
+                           + (f" · {cohort}" if cohort else "")
+                           + f" · {clean.get('contact')}" + (f" · {preview}" if preview else ""))
     return payload
 
 
@@ -232,7 +238,8 @@ def restore(store: Any, env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
                                     str(row.get("message") or "")):
                 continue
             store.add_inquiry(day, str(row.get("topic")), str(row.get("contact")),
-                              str(row.get("message") or ""))
+                              str(row.get("message") or ""),
+                              cohort=str(row.get("cohort") or "")[:40])
             imported += 1
         except Exception:  # noqa: BLE001 - 한 건 실패가 나머지를 막지 않는다
             continue

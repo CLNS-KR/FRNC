@@ -77,15 +77,23 @@ INQUIRY_CONTACT_MAX = 120
 INQUIRY_MESSAGE_MAX = 500
 INQUIRY_DAILY_CAP = 200
 INQUIRY_KEEP_DAYS = 180
+# 무료 베타 파일럿 구분 태그(0.1.7). 선택 입력 — 없으면 종전과 똑같이 동작한다.
+# `cohort` 를 먼저 읽고, 없으면 `source` 를 쓴다.
+INQUIRY_COHORT_MAX = 40
+INQUIRY_COHORT_FIELDS = ("cohort", "source")
+INQUIRY_COHORT_EXAMPLES_KO = "beta_pilot·citechart"
 
 _CONTACT_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _MESSAGE_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _SPACE_RE = re.compile(r"\s+")
+_COHORT_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,%d}$" % (INQUIRY_COHORT_MAX - 1))
 
 INQUIRY_ERRORS_KO = {
     "contact_too_short": f"연락처를 {INQUIRY_CONTACT_MIN}자 이상 적어 주세요.",
     "contact_too_long": f"연락처는 {INQUIRY_CONTACT_MAX}자까지 쓸 수 있습니다.",
     "invalid_topic": "문의 유형을 다시 선택해 주세요.",
+    "invalid_cohort": (f"베타 구분 태그는 {INQUIRY_COHORT_MAX}자까지, 영문 소문자·숫자와 "
+                       f". _ : - 만 쓸 수 있습니다({INQUIRY_COHORT_EXAMPLES_KO})."),
     "message_too_long": f"문의 내용은 {INQUIRY_MESSAGE_MAX}자까지 쓸 수 있습니다.",
     "daily_cap_reached": "오늘 접수 한도에 닿았습니다. 내일 다시 보내 주세요.",
     "store_unavailable": "지금은 문의를 저장할 수 없습니다. 잠시 뒤 다시 시도해 주세요.",
@@ -347,6 +355,28 @@ def clean_message(value: Any) -> str:
     return text.strip()
 
 
+def clean_cohort(payload: Dict[str, Any]) -> tuple:
+    """선택 필드 `cohort`(별칭 `source`) → `(태그, 오류 코드)`.
+
+    값이 없거나 빈 문자열이면 `("", None)` — 종전 요청과 똑같이 취급한다.
+    """
+    raw: Any = None
+    for field in INQUIRY_COHORT_FIELDS:
+        if field in payload and payload.get(field) is not None:
+            raw = payload.get(field)
+            break
+    if raw is None:
+        return "", None
+    if not isinstance(raw, str):
+        return "", "invalid_cohort"
+    tag = raw.strip().lower()
+    if not tag:
+        return "", None
+    if len(tag) > INQUIRY_COHORT_MAX or not _COHORT_RE.match(tag):
+        return "", "invalid_cohort"
+    return tag, None
+
+
 def normalize_inquiry(payload: Any) -> tuple:
     data = payload if isinstance(payload, dict) else {}
     contact = clean_contact(data.get("contact"))
@@ -360,7 +390,10 @@ def normalize_inquiry(payload: Any) -> tuple:
     message = clean_message(data.get("message"))
     if len(message) > INQUIRY_MESSAGE_MAX:
         return {}, "message_too_long"
-    return {"contact": contact, "topic": topic, "message": message}, None
+    cohort, cohort_error = clean_cohort(data)
+    if cohort_error:
+        return {}, cohort_error
+    return {"contact": contact, "topic": topic, "message": message, "cohort": cohort}, None
 
 
 def save_inquiry(store: Any, data: Dict[str, Any], day: Optional[str] = None) -> Dict[str, Any]:
@@ -370,24 +403,35 @@ def save_inquiry(store: Any, data: Dict[str, Any], day: Optional[str] = None) ->
     contact = str(data.get("contact") or "")
     topic = str(data.get("topic") or "")
     message = str(data.get("message") or "")
+    cohort = str(data.get("cohort") or "")[:INQUIRY_COHORT_MAX]
     try:
         if store.inquiry_exists(stamp, topic, contact, message):
             return {"stored": False, "duplicate": True}
         if store.inquiry_count(stamp) >= INQUIRY_DAILY_CAP:
             return {"stored": False, "duplicate": False, "error": "daily_cap_reached"}
-        row_id = store.add_inquiry(stamp, topic, contact, message)
+        row_id = store.add_inquiry(stamp, topic, contact, message, cohort=cohort)
     except Exception:  # noqa: BLE001
         return {"stored": False, "duplicate": False, "error": "store_unavailable"}
     return {"stored": True, "duplicate": False, "receipt": f"F{int(row_id):05d}"}
 
 
-def inquiry_summary(store: Any) -> Dict[str, Any]:
+def inquiry_summary(store: Any, include_cohort: bool = True) -> Dict[str, Any]:
+    """주제별 접수 건수 — 연락처·내용은 읽지 않는다.
+
+    `include_cohort=False` 는 공개 `/healthz` 용이다. 유입 태그별 건수는 운영 정보라
+    관리자 조회(`/v1/inquiries`)에서만 본다(0.1.7).
+    """
     counts: Dict[str, int] = {}
+    cohort_counts: Dict[str, int] = {}
     try:
         counts = store.inquiry_topic_counts() if store is not None else {}
     except Exception:  # noqa: BLE001
         counts = {}
-    return {
+    try:
+        cohort_counts = store.inquiry_cohort_counts() if store is not None else {}
+    except Exception:  # noqa: BLE001 - 0.1.7 이전 DB 도 요약은 뜨게 한다
+        cohort_counts = {}
+    summary: Dict[str, Any] = {
         "total": sum(counts.values()),
         "by_topic": [{"topic": topic, "label_ko": INQUIRY_TOPIC_LABELS[topic],
                       "count": int(counts.get(topic, 0))} for topic in INQUIRY_TOPICS],
@@ -395,6 +439,11 @@ def inquiry_summary(store: Any) -> Dict[str, Any]:
         "in_usage_stats": False,
         "keep_days": INQUIRY_KEEP_DAYS,
     }
+    if include_cohort:
+        summary["by_cohort"] = [{"cohort": tag or "(태그 없음)", "count": int(count)}
+                               for tag, count in sorted(cohort_counts.items(),
+                                                        key=lambda kv: -kv[1])]
+    return summary
 
 
 def purge_inquiries(store: Any, keep_days: int = INQUIRY_KEEP_DAYS,

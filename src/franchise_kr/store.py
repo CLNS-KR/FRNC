@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS inquiries (
     topic      TEXT NOT NULL,
     contact    TEXT NOT NULL,
     message    TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    cohort     TEXT NOT NULL DEFAULT ''   -- 무료 베타·소개 유입 구분 태그(0.1.7, 선택)
 );
 CREATE INDEX IF NOT EXISTS idx_inquiries_day ON inquiries(day);
 
@@ -63,6 +64,15 @@ class Store:
                 pass
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """이미 있는 파일 DB 에 0.1.7 컬럼(`cohort`)을 더한다(없을 때만)."""
+        with self._lock:
+            columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(inquiries)")}
+            if "cohort" not in columns:
+                self.conn.execute("ALTER TABLE inquiries ADD COLUMN cohort TEXT NOT NULL DEFAULT ''")
+                self.conn.commit()
 
     def close(self) -> None:
         with self._lock:
@@ -92,12 +102,18 @@ class Store:
         return int(row["c"])
 
     # --- 문의(이용자가 직접 남긴 연락처) ------------------------------------
-    def add_inquiry(self, day: str, topic: str, contact: str, message: str = "") -> int:
+    def add_inquiry(self, day: str, topic: str, contact: str, message: str = "",
+                    cohort: str = "") -> int:
+        """문의 1건을 저장하고 행 번호를 돌려준다(접수번호로 쓴다).
+
+        `cohort`(0.1.7)는 무료 베타·소개 유입 구분 태그이며 비어 있어도 된다.
+        """
         stamp = iso(now_kst())
         with self._lock:
             cur = self.conn.execute(
-                "INSERT INTO inquiries(day, topic, contact, message, created_at) VALUES (?,?,?,?,?)",
-                (day, topic, contact, message, stamp))
+                "INSERT INTO inquiries(day, topic, contact, message, created_at, cohort) "
+                "VALUES (?,?,?,?,?,?)",
+                (day, topic, contact, message, stamp, str(cohort or "")[:40]))
             self.conn.commit()
             return int(cur.lastrowid or 0)
 
@@ -121,7 +137,7 @@ class Store:
         """최근 접수(관리자 조회용) — 연락처는 회신 목적으로만 돌려준다."""
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id, day, topic, contact, message, created_at FROM inquiries "
+                "SELECT id, day, topic, contact, message, created_at, cohort FROM inquiries "
                 "ORDER BY id DESC LIMIT ?", (max(1, min(200, int(limit))),)).fetchall()
         return [{
             "receipt": f"F{int(row['id']):05d}",
@@ -130,6 +146,7 @@ class Store:
             "contact": str(row["contact"]),
             "message": str(row["message"] or ""),
             "created_at": str(row["created_at"]),
+            "cohort": str(row["cohort"] or ""),
         } for row in rows]
 
     def inquiry_topic_counts(self) -> Dict[str, int]:
@@ -138,6 +155,14 @@ class Store:
                 "SELECT topic, COUNT(*) AS c FROM inquiries GROUP BY topic ORDER BY c DESC"
             ).fetchall()
         return {str(row["topic"]): int(row["c"]) for row in rows}
+
+    def inquiry_cohort_counts(self) -> Dict[str, int]:
+        """무료 베타·소개 유입 태그별 건수(0.1.7, 관리자 요약용) — 연락처·내용은 읽지 않는다."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT cohort, COUNT(*) AS c FROM inquiries GROUP BY cohort ORDER BY c DESC"
+            ).fetchall()
+        return {str(row["cohort"] or ""): int(row["c"]) for row in rows}
 
     def purge_inquiries(self, keep_days: int = 180, day: Optional[str] = None) -> int:
         today = day or now_kst().strftime("%Y-%m-%d")
