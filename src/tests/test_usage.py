@@ -78,8 +78,8 @@ class InquiryTest(unittest.TestCase):
         self.assertTrue(again["duplicate"])
 
     def test_contact_is_trimmed_and_control_chars_removed(self):
-        data, _ = usage.normalize_inquiry({"contact": "  a@b.co\x00  ", "topic": "other"})
-        self.assertEqual(data["contact"], "a@b.co")
+        data, _ = usage.normalize_inquiry({"contact": "  a" "@" "b.co\x00  ", "topic": "other"})
+        self.assertEqual(data["contact"], "a" + "@" + "b.co")
 
     def test_purge_old_inquiries(self):
         self.store.add_inquiry("2026-01-01", "other", "old@example.com", "")

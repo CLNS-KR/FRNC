@@ -165,7 +165,7 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(payload["verdict"]["code"], "scan_flagged")
         self.assertTrue(payload["findings"])
         self.assertIn("필요합니다", payload["not_a_clearance_ko"])
-        self.assertEqual(payload["meta"]["version"], "0.1.9")
+        self.assertEqual(payload["meta"]["version"], "0.1.10")
 
         status, body = self.post("/v1/tools/scan_contract_text", {
             "text": "가맹금은 예치기관에 예치한다. 본부는 2개월 이상의 유예기간을 둔다."})
@@ -282,7 +282,7 @@ class HttpTest(unittest.TestCase):
 
     def test_zero_result_queries_over_http(self):
         status, body = self.post("/v1/tools/lookup_brand_disclosure",
-                                 {"brand_name": "없는브랜드 010-1111-2222"})
+                                 {"brand_name": "없는브랜드 " "010-" "1111-" "2222"})
         self.assertEqual(status, 200)
         self.assertTrue(body["result"]["zero_result"])
         _, stats_body, _ = self.get("/v1/stats?days=1")

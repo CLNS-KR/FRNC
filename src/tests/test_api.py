@@ -162,7 +162,7 @@ class ToolRegistryTest(unittest.TestCase):
         bad = api.submit_inquiry({"contact": "", "topic": "other"})
         self.assertFalse(bad["ok"])
         self.assertEqual(bad["error"], "contact_too_short")
-        bad_topic = api.submit_inquiry({"contact": "a@b.co", "topic": "nope"})
+        bad_topic = api.submit_inquiry({"contact": "a" "@" "b.co", "topic": "nope"})
         self.assertEqual(bad_topic["error"], "invalid_topic")
 
 

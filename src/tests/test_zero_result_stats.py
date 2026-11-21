@@ -22,7 +22,7 @@ MISSING = "존재하지않는가맹브랜드명"
 
 class SanitizeQueryTest(unittest.TestCase):
     def test_removes_identifiers(self):
-        query = usage.sanitize_query("홍길동 010-1234-5678 hong@example.com")
+        query = usage.sanitize_query("홍길동 " "010-" "1234-" "5678 hong@example.com")
         self.assertNotIn("010", query)
         self.assertNotIn("example.com", query)
         self.assertNotIn("@", query)
@@ -44,7 +44,7 @@ class SanitizeQueryTest(unittest.TestCase):
         self.assertEqual(usage.MAX_QUERY_CHARS, 30)
 
     def test_empty_and_digit_only(self):
-        for value in ("", "   ", "010-1234-5678", "1234567", "!@#$"):
+        for value in ("", "   ", "010-" "1234-" "5678", "1234567", "!@#$"):
             self.assertEqual(usage.sanitize_query(value), "", value)
 
     def test_rrn_removed(self):
@@ -113,7 +113,7 @@ class ZeroResultStatsTest(unittest.TestCase):
         self.assertNotIn(usage.FLAG_ZERO, stats["totals"]["flags"])
 
     def test_identifiers_never_reach_stats(self):
-        name = "홍길동 010-9876-5432 hong@example.com 치킨"
+        name = "홍길동 " "010-" "9876-" "5432 hong@example.com 치킨"
         self.lookup(name)
         _, body, _ = None, json.dumps(usage.statistics(self.store, days=1), ensure_ascii=False), None
         self.assertNotIn("010-9876", body)

@@ -38,16 +38,45 @@ Disallow: /v1/
 User-agent: Yeti
 Allow: /
 
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# AI 크롤러 — 인용·색인 허용(학습 전용 수집도 막지 않는다).
 User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
 Allow: /
 
 User-agent: ClaudeBot
 Allow: /
 
+User-agent: Claude-SearchBot
+Allow: /
+
 User-agent: PerplexityBot
 Allow: /
 
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
 Sitemap: {root}/sitemap.xml
+# AI·개발자용 안내: {root}/llms.txt
 """
 
 
@@ -132,6 +161,15 @@ def llms_txt(base: Optional[str] = None) -> str:
 - 같이 쓰는 도구: 수입·유통 규제 체크 CLNS({CLNS_URL}) — 같은 팀이 만든 자매 서비스입니다.
 - 이 서비스는 계약서 검토·법률 자문·신고 대행을 하지 않습니다. 최종 판단은 변호사·가맹거래사 자문으로.
 - 정보공개서 원문: 가맹사업정보제공시스템 {DISCLOSURE_PORTAL}
+
+## 구조화 데이터(JSON-LD)
+- `/` — `Organization` · `WebSite`(SearchAction `?brand=`) · `WebApplication` 을 `@graph` 한 덩어리로,
+  `@id` 로 서로 연결해 둔다.
+- `/guides/` — `CollectionPage` + `BreadcrumbList`.
+- `/guides/{{slug}}` — `FAQPage` + `BreadcrumbList` + `WebPage`(조문 근거 링크 포함).
+- 인용할 때: 판정을 확정으로 쓰지 말고 `verdict`(`check_likely`/`info_needed`/`low_risk`)·`questions_ko`·
+  `laws`(조문·시행일·원문 URL)·`disclaimer_ko` 를 함께 옮겨야 한다.
+
 {guides.llms_section(root)}"""
 
 

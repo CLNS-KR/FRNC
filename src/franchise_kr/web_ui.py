@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from . import brand_index, engine, live_api, models, site_verification
 from .version import (CLNS_URL, DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME,
@@ -498,6 +498,63 @@ def _guides_teaser_html(limit: int = 6) -> str:
     )
 
 
+def home_json_ld(root: str) -> str:
+    """홈 구조화 데이터 — Organization · WebSite · WebApplication 을 `@id` 로 연결한다.
+
+    AI 검색·검색엔진이 "이 사이트가 무엇을 하는 곳인지"를 한 덩어리로 읽게 한다.
+    판정 문구는 넣지 않고(단정 금지), 서비스 성격·무료 여부·툴 범위만 적는다.
+    """
+    graph: List[Dict[str, Any]] = [
+        {
+            "@type": "Organization",
+            "@id": root + "/#org",
+            "name": SERVICE_NAME,
+            "url": root + "/",
+        },
+        {
+            "@type": "WebSite",
+            "@id": root + "/#website",
+            "name": f"{SERVICE_NAME} — {SERVICE_TITLE_KO}",
+            "url": root + "/",
+            "inLanguage": "ko-KR",
+            "publisher": {"@id": root + "/#org"},
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": {"@type": "EntryPoint",
+                           "urlTemplate": root + "/?brand={search_term_string}"},
+                "query-input": "required name=search_term_string",
+            },
+        },
+        {
+            "@type": "WebApplication",
+            "@id": root + "/#app",
+            "name": SERVICE_NAME,
+            "url": root + "/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "inLanguage": "ko-KR",
+            "isAccessibleForFree": True,
+            "offers": {"@type": "Offer", "price": "0", "priceCurrency": "KRW"},
+            "description": (
+                "프랜차이즈 가입 전 가맹사업법·시행령 조문과 대조해 확인할 위험 신호·"
+                "체크리스트·질문·근거 조문을 정리하는 무료 사전 점검 서비스. 확정 판정이 아니다."
+            ),
+            "featureList": [
+                "가맹금·인테리어·숙고기간·영업지역 등 핵심 축 리스크 체크",
+                "계약서·특약 문구 스캔(원문 인용·근거 조문·수정 요청 문구)",
+                "브랜드 정보공개서 요약(공정위 가맹정보)",
+                "MCP(JSON-RPC 2.0) 툴과 REST JSON 동시 제공",
+            ],
+            "isPartOf": {"@id": root + "/#website"},
+            "publisher": {"@id": root + "/#org"},
+        },
+    ]
+    body = {"@context": "https://schema.org", "@graph": graph}
+    return ('<script type="application/ld+json">'
+            + json.dumps(body, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+            + "</script>")
+
+
 def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     from . import guides
 
@@ -515,6 +572,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     _env.setdefault("GOOGLE_SITE_VERIFICATION", "3KG1TCarS7RYxIpCqZ0fv8yIm8S0vBp7k1NNlVlWoxg")
     _env.setdefault("NAVER_SITE_VERIFICATION", "f12b91bab9bab718349e637c8a043e5703a4be35")
     meta_tags = site_verification.meta_tags(_env)
+    json_ld = home_json_ld(SERVICE_URL)
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -536,6 +594,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="{SERVICE_URL}/">
 {meta_tags}
+{json_ld}
 <style>{BASE_CSS}</style>
 </head>
 <body>
