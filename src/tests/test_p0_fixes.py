@@ -273,27 +273,33 @@ class DataStateTruthTest(unittest.TestCase):
 # P1 — 웹 조회 카드·확인 질문형 문구·크로스 링크·404
 # ---------------------------------------------------------------------------
 class WebBrandCardTest(unittest.TestCase):
+    """0.1.12 — 브랜드 조회는 첫 화면 검색창 하나로 합쳤다(별도 카드 없음)."""
+
     @classmethod
     def setUpClass(cls):
         cls.html = web_ui.render_page({})
 
-    def test_brand_card_exists(self):
-        for marker in ('id="brand-card"', "브랜드 정보공개서 조회", 'id="brand-q"',
-                       'id="brand-run"', 'id="brand-result"'):
+    def test_brand_search_lives_in_the_hero_card(self):
+        # llms.txt 가 /#brand-card 로 안내하므로 그 앵커는 첫 화면 검색 카드에 남긴다.
+        for marker in ('id="brand-card"', 'id="brand_name"', 'id="run"',
+                       'id="result"', "리스크 확인하기"):
             self.assertIn(marker, self.html, marker)
 
-    def test_brand_card_calls_the_lookup_tool(self):
+    def test_brand_search_calls_the_lookup_tool(self):
         self.assertIn("/v1/tools/lookup_brand_disclosure", self.html)
-        self.assertIn("function brandLookup()", self.html)
+        self.assertIn("function lookup(query)", self.html)
         self.assertIn("brand_name", self.html)
 
-    def test_brand_card_does_not_create_an_engine_field(self):
-        # 카드 입력은 판정 폼(name=)이 아니다 — 엔진 입력으로 새지 않게 name 속성을 두지 않는다.
+    def test_brand_search_does_not_create_a_second_engine_field(self):
+        # 브랜드 입력은 검색창 하나뿐이다 — 별도 조회 필드를 다시 만들지 않는다.
         self.assertNotIn('name="brand_q"', self.html)
         self.assertNotIn('name="brand-q"', self.html)
+        self.assertNotIn('id="brand-q"', self.html)
+        self.assertEqual(self.html.count('name="brand_name"'), 1)
 
-    def test_brand_card_carries_no_result_caution(self):
-        self.assertIn("0건은 '등록된 브랜드가 없다'도", self.html)
+    def test_zero_result_caution_remains(self):
+        self.assertIn("'등록된 브랜드가 없다'도", self.html)
+        self.assertIn("0건이어도", self.html)
 
     def test_llms_links_the_card(self):
         self.assertIn("/#brand-card", static_files.llms_txt())

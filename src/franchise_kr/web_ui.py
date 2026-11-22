@@ -1,26 +1,30 @@
 """사람용 단일 페이지 웹 UI (`GET /`) — 로그인 없이 10초 체크.
 
-원칙
-----
-1. **외부 의존 0**: CSS·JS·아이콘 전부 인라인(CDN·폰트·트래커 없음). CSP 가 외부 로드를 막는다.
-2. **개인정보 최소**: 판정 폼에서 이름·연락처·주민등록번호를 받지 않는다. 입력값은 요청 1회로만
+원칙 (0.1.12 — 첫 화면 단순화)
+------------------------------
+1. **한 화면에 하나**: 첫 화면은 "브랜드명(또는 업종) 입력 + [리스크 확인하기]" 하나와
+   예시 3개뿐이다. 금액·계약 조건 30여 개는 `상세 조건 입력` 안에 접어 둔다.
+2. **외부 의존 0**: CSS·JS·아이콘 전부 인라인(CDN·폰트·트래커 없음). CSP 가 외부 로드를 막는다.
+3. **개인정보 최소**: 판정 폼에서 이름·연락처·주민등록번호를 받지 않는다. 입력값은 요청 1회로만
    쓰고 서버에 저장하지 않는다(카운터에도 남기지 않음). 예외는 맨 아래 **문의 카드** 하나로,
    거기 직접 적은 연락처만 `POST /v1/inquiry` 로 보내 회신 목적으로 보관한다.
-3. **단정 금지**: 판정 문구는 "확인 필요 신호 있음 / 정보 부족 / 뚜렷한 위험 신호 없음" 세 가지.
-4. **근거 우선**: 위험 신호마다 이유·법 조문·되돌리기 어려운 점·확인 질문을 접어서 보여 준다.
-5. **1초 프리셋**: 실제로 자주 오는 네 가지 상황을 버튼 하나로 채우고 바로 판정한다.
-6. **문구 스캔**: 판정 폼과 따로 된 카드에서 계약서·특약 문구만 받아 대조한다. 문구는
-   저장하지 않고, 입·출력 어디에도 '안전·문제없음'을 쓰지 않는다.
+4. **단정 금지**: 판정 문구는 "확인 필요 신호 있음 / 정보 부족 / 뚜렷한 위험 신호 없음" 세 가지.
+5. **결과는 신호등 → 지표 → 질문 순서**: 맨 위 종합 카드 하나로 "어디를 봐야 하는지"를 정하고,
+   초기 투자비용·폐점률·법적 분쟁·체크할 질문 네 칸, 그다음 확인할 신호와 물어볼 질문.
+   근거 조문·체크리스트·비용 구조는 `자세히 보기` 안에 둔다.
+6. **한 번 더 물어보기**: 모르는 항목은 결과 화면에서 한 번에 답할 수 있는 질문 3개로 돌려준다.
+7. **문구 스캔**: 계약서·특약 문구만 받아 대조한다. 문구는 저장하지 않고, 입·출력 어디에도
+   '안전·문제없음'을 쓰지 않는다.
 """
 from __future__ import annotations
 
 import json
+import os as _os
 from typing import Any, Dict, List, Optional
 
-from . import brand_index, engine, live_api, models, site_verification
+from . import engine, live_api, site_verification
 from .version import (CLNS_URL, DISCLOSURE_PORTAL, GRANT_URL, SERVICE_NAME,
-                      SERVICE_SUBTITLE_EN, SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL,
-                      __version__)
+                      SERVICE_TAGLINE, SERVICE_TITLE_KO, SERVICE_URL, __version__)
 
 BASE_CSS = """
 :root{
@@ -50,7 +54,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-size:16px;line-height:1
 a{color:var(--brand);text-underline-offset:2px}
 .wrap{max-width:960px;margin:0 auto;padding:0 16px 72px}
 header.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
-  padding:22px 0 16px;border-bottom:1px solid var(--line)}
+  padding:20px 0 16px;border-bottom:1px solid var(--line)}
 .brand{display:flex;gap:12px;align-items:center;min-width:0}
 .mark{width:42px;height:42px;border-radius:12px;background:var(--brand);color:var(--on-brand);
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex:0 0 auto;
@@ -94,10 +98,10 @@ button.primary:disabled{opacity:.6;cursor:progress}
 button.ghost{font-size:14px;font-weight:600;color:var(--ink-soft);background:transparent;
   border:1px solid var(--line);border-radius:11px;padding:12px 16px;min-height:44px}
 button.ghost:hover{color:var(--ink)}
-.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-@media (max-width:760px){.presets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.presets{grid-template-columns:1fr}}
 button.preset{text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;
-  padding:12px 13px;min-height:76px;display:flex;flex-direction:column;gap:4px}
+  padding:12px 13px;min-height:64px;display:flex;flex-direction:column;gap:4px}
 button.preset:hover{border-color:var(--brand)}
 button.preset .t{font-size:13px;font-weight:800;color:var(--ink);line-height:1.35}
 button.preset .d{font-size:11.5px;color:var(--ink-soft);line-height:1.4}
@@ -168,6 +172,77 @@ button.sample .d{font-size:11.5px;color:var(--ink-soft);line-height:1.4}
 .finding .req{margin:8px 0 0;font-size:13px;line-height:1.6}
 .finding .req b{font-weight:800}
 .scan-checks{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--ink-soft)}
+
+/* ---- 0.1.12 첫 화면 단순화 — 새 구성 요소 -------------------------------- */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.hero{padding:26px 22px 22px}
+.hero h2{font-size:25px;line-height:1.28;margin:0 0 8px;letter-spacing:-.4px}
+.hero .lead{margin:0 0 18px;font-size:14.5px;line-height:1.6;color:var(--ink-soft);max-width:46ch}
+.hero .lead b{color:var(--ink)}
+.search-row{display:flex;gap:10px;align-items:stretch}
+.search-row input{font-size:17px;min-height:56px;border-radius:12px;background:var(--card);padding:13px 15px}
+button.primary.big{font-size:16.5px;padding:0 22px;min-height:56px;white-space:nowrap}
+@media (max-width:640px){.search-row{flex-direction:column}button.primary.big{width:100%}
+  .hero{padding:22px 18px}.hero h2{font-size:22px}}
+.chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.chips-label{font-size:12px;font-weight:700;color:var(--ink-soft)}
+button.chip{font-size:13.5px;font-weight:700;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:999px;padding:9px 14px;min-height:40px}
+button.chip:hover{border-color:var(--brand)}
+details.more{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+details.more>summary{cursor:pointer;font-size:14.5px;font-weight:800;color:var(--ink);
+  list-style:none;display:flex;gap:8px;align-items:baseline}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::before{content:"+";font-weight:800;color:var(--brand);font-size:16px}
+details.more[open]>summary::before{content:"–"}
+details.more>summary .note{font-size:12px;font-weight:600;color:var(--ink-soft)}
+.more-body{margin-top:14px}
+.more-body>h4{margin:20px 0 10px;font-size:13px;font-weight:800;color:var(--ink-soft)}
+.group{margin-top:20px}
+.group:first-of-type{margin-top:16px}
+.group>h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--ink-soft)}
+.signal{border:2px solid var(--line);border-radius:16px;padding:22px;background:var(--card)}
+.signal.check{border-color:var(--danger);background:var(--danger-soft)}
+.signal.info{border-color:var(--warn);background:var(--warn-soft)}
+.signal.low{border-color:var(--ok);background:var(--ok-soft)}
+.signal .state{margin:0;font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--ink-soft)}
+.signal .big{margin:6px 0 0;font-size:27px;line-height:1.25;font-weight:800;letter-spacing:-.4px;
+  color:var(--ink);word-break:keep-all}
+.signal .say{margin:9px 0 0;font-size:14.5px;line-height:1.65;color:var(--ink)}
+.signal .meta-line{margin:12px 0 0;font-size:12.5px;color:var(--ink-soft)}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin-top:14px;
+  background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.facts .cell{background:var(--card);padding:11px 13px}
+.facts .k{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft)}
+.facts .v{display:block;margin-top:2px;font-size:14.5px;font-weight:800;color:var(--ink);word-break:keep-all}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+@media (max-width:560px){.metrics{grid-template-columns:1fr}}
+.metric{border:1px solid var(--line);border-radius:13px;padding:15px 16px;background:var(--card)}
+.metric .k{font-size:12.5px;font-weight:700;color:var(--ink-soft)}
+.metric .v{margin-top:5px;font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.2px;
+  word-break:keep-all}
+.metric .d{margin-top:5px;font-size:12.5px;line-height:1.5;color:var(--ink-soft)}
+.quick{margin-top:16px;border:1px solid var(--line);border-radius:13px;padding:16px;background:var(--surface-2)}
+.quick h3{margin:0;font-size:14.5px}
+.quick .qq{margin-top:14px}
+.quick .qq>span{display:block;font-size:13.5px;font-weight:700;color:var(--ink)}
+.quick .opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+button.opt{font-size:13px;font-weight:700;color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:9px;padding:8px 12px;min-height:38px}
+button.opt:hover{border-color:var(--brand)}
+.result-head{margin:24px 0 10px;font-size:15.5px;font-weight:800;letter-spacing:-.2px}
+.morebox{margin-top:18px;border:1px solid var(--line);border-radius:12px;padding:0 16px;
+  background:var(--card)}
+.morebox>summary{cursor:pointer;font-size:14px;font-weight:800;color:var(--ink);padding:14px 0;
+  list-style:none}
+.morebox>summary::-webkit-details-marker{display:none}
+.morebox>summary::before{content:"＋ ";color:var(--brand)}
+.morebox[open]>summary::before{content:"－ "}
+.morebox .more-inner{padding:2px 0 18px;border-top:1px solid var(--line)}
+.quiet{background:var(--surface-2)}
+.quiet h2{font-size:15.5px}
+.say{margin:10px 0 0;font-size:14px;line-height:1.6}
 """
 
 PRESETS = [
@@ -212,6 +287,71 @@ PRESETS = [
             "supplier_designated": "false", "price_fixing": "false",
             "ad_cost_burden": "shared", "penalty_ratio_pct": 10,
         },
+    },
+]
+
+# 첫 화면 예시 3개 — 브랜드명을 넣고 한 번에 결과를 보는 용도(단일 브랜드로 잡히는 이름만).
+QUICK_BRANDS = ["컴포즈커피", "굽네치킨", "파리바게뜨"]
+
+# 결과 화면에서 한 번에 답하는 질문 — 모르는 항목을 3개까지만 물어본다.
+QUICK_ANSWERS = [
+    {
+        "field": "disclosure_days_before",
+        "q": "정보공개서를 받고 14일이 지났나요?",
+        "match": "며칠이 지났나요",
+        "opts": [
+            {"l": "14일 넘었어요", "set": {"disclosure_days_before": 21, "contract_doc_days_before": 21}},
+            {"l": "아직이에요", "set": {"disclosure_days_before": 0, "contract_doc_days_before": 0}},
+        ],
+    },
+    {
+        "field": "payment_route",
+        "q": "가맹금은 어디로 내라고 하나요?",
+        "match": "어디로 내라고",
+        "opts": [
+            {"l": "예치기관", "set": {"payment_route": "escrow"}},
+            {"l": "피해보상보험", "set": {"payment_route": "insurance"}},
+            {"l": "본사 계좌", "set": {"payment_route": "hq_account"}},
+            {"l": "정하지 않았어요", "set": {"payment_route": "none"}},
+        ],
+    },
+    {
+        "field": "interior_designated",
+        "q": "인테리어·집기를 직접 고를 수 있나요?",
+        "match": "본사가 지정하나요",
+        "opts": [
+            {"l": "자유롭게 고를 수 있어요", "set": {"interior_designated": "free"}},
+            {"l": "일부만 지정", "set": {"interior_designated": "partial"}},
+            {"l": "본부 지정 강제", "set": {"interior_designated": "forced"}},
+        ],
+    },
+    {
+        "field": "territory",
+        "q": "계약서에 영업지역이 적혀 있나요?",
+        "match": "영업지역",
+        "opts": [
+            {"l": "독점으로 적혀 있음", "set": {"territory": "exclusive"}},
+            {"l": "영업지역만 적혀 있음", "set": {"territory": "defined"}},
+            {"l": "없어요", "set": {"territory": "none"}},
+        ],
+    },
+    {
+        "field": "revenue_written",
+        "q": "매출 보장을 서면으로 받았나요?",
+        "match": "매출 보장을 서면",
+        "opts": [
+            {"l": "받았어요", "set": {"revenue_written": "true"}},
+            {"l": "못 받았어요", "set": {"revenue_written": "false"}},
+        ],
+    },
+    {
+        "field": "legal_violation",
+        "q": "본부가 공정위 시정조치·과징금을 받은 적이 있나요?",
+        "match": "시정조치",
+        "opts": [
+            {"l": "있어요", "set": {"legal_violation": "true"}},
+            {"l": "없어요", "set": {"legal_violation": "false"}},
+        ],
     },
 ]
 
@@ -305,60 +445,6 @@ def _select_field(name: str, label: str, rows: list, hint: str = "") -> str:
     )
 
 
-def _form_html() -> str:
-    money_fields = "".join([
-        _field("brand_name", "브랜드명", hint="예: BBQ · 교촌치킨", extra=' autocomplete="off"'),
-        _field("industry", "업종", hint="예: 치킨 · 커피 · 편의점", extra=' autocomplete="off"'),
-        _field("franchise_fee_krw", "가맹비", hint="예: 1100만원", extra=' inputmode="numeric"'),
-        _field("education_fee_krw", "가맹교육비", hint="예: 330만원", extra=' inputmode="numeric"'),
-        _field("deposit_krw", "가맹보증금", hint="예: 1000만원", extra=' inputmode="numeric"'),
-        _field("interior_krw", "인테리어 비용", hint="예: 5500만원", extra=' inputmode="numeric"'),
-        _field("equipment_krw", "설비·집기", hint="예: 2000만원", extra=' inputmode="numeric"'),
-        _field("other_krw", "기타 비용", hint="예: 초도물량·간판", extra=' inputmode="numeric"'),
-    ])
-    selects = "".join(_select_field(name, label, rows, SELECT_HINTS.get(name, ""))
-                      for name, label, rows in SELECTS)
-    return f"""
-<div class="grid three">
-  {money_fields}
-  <div class="full"><span class="inline-sum" id="money-sum">총투자: 항목을 넣으면 자동으로 합산합니다.</span></div>
-
-  {_field("disclosure_days_before", "정보공개서 받은 뒤 지난 날", kind="number",
-          hint="당일이면 0. 14일(자문 시 7일) 전에 계약·입금하면 위반입니다.", extra=' min="0" step="1"')}
-  {_field("contract_doc_days_before", "계약서 초안 받은 뒤 지난 날", kind="number",
-          hint="계약서도 같은 숙고기간이 적용됩니다.", extra=' min="0" step="1"')}
-  {_select_field("advisor_reviewed", "변호사·가맹거래사 자문", [("", "모름"), ("true", "받음"), ("false", "안 받음")],
-                 "자문을 받으면 숙고기간이 7일로 줄어듭니다.")}
-  {_field("revenue_claim_ko", "본부가 한 매출 관련 말", hint="예: 월 매출 5천 보장", extra=' autocomplete="off"')}
-
-  <div class="full"><h3>계약·영업 조건</h3></div>
-  {selects}
-  {_field("penalty_ratio_pct", "중도해지 위약금(총투자 대비 %)", kind="number",
-          hint="모르면 비워 두세요. 20% 이상이면 신호입니다.", extra=' min="0" step="1"')}
-  {_field("termination_grace_months", "본부 해지 시 유예기간(개월)", kind="number",
-          hint="법은 2개월 이상 유예와 서면 2회 통지를 요구합니다.", extra=' min="0" step="1"')}
-  {_field("closure_rate_3y_pct", "최근 3년 폐점률(%)", kind="number",
-          hint="모르면 비워 두세요. 15% 이상이면 위험 높음입니다.", extra=' min="0" step="1"')}
-  {_field("renewal_years", "최초 포함 전체 계약기간(년)", kind="number",
-          hint="갱신 요구권은 전체 10년을 넘지 않습니다.", extra=' min="0" step="1"')}
-  {_select_field("sales_target", "판매목표 강제", YES_NO_UNKNOWN,
-                 "목표 미달 시 불이익이 있으면 불공정거래행위가 될 수 있습니다.")}
-  {_select_field("supplier_designated", "거래처(공급처) 지정", YES_NO_UNKNOWN,
-                 "특정 업체와만 거래하도록 강제하면 구입강제가 될 수 있습니다.")}
-  {_select_field("essential_price_hidden", "필수품목 단가·산정기준 미공개", YES_NO_UNKNOWN,
-                 "단가를 나중에 알려 주겠다고 하면 매입가를 비교할 기준이 없습니다.")}
-  {_select_field("essential_items_broad", "일반 공산품까지 필수품목", YES_NO_UNKNOWN,
-                 "가맹사업과 무관한 물품을 필수품목으로 묶으면 구입강제가 될 수 있습니다.")}
-  {_select_field("margin_raise_unilateral", "차액가맹금 일방 인상", YES_NO_UNKNOWN,
-                 "적정 도매가격을 넘는 대가를 본부가 일방적으로 올리는지 확인하세요.")}
-  {_select_field("resale_price_bound", "판매가격 유지·변경 제한", YES_NO_UNKNOWN,
-                 "본부가 정한 가격을 유지하게 하면 가격 구속 유형을 검토할 수 있습니다.")}
-  {_select_field("discount_forbidden", "할인 금지", YES_NO_UNKNOWN,
-                 "할인 권한이 점주에게 있는지 계약서에서 확인하세요.")}
-</div>
-"""
-
-
 def _presets_html() -> str:
     buttons = []
     for preset in PRESETS:
@@ -368,6 +454,107 @@ def _presets_html() -> str:
             f'<span class="d">{preset["desc"]}</span></button>'
         )
     return "".join(buttons)
+
+
+def _chips_html() -> str:
+    return "".join(
+        f'<button type="button" class="chip" data-query="{name}">{name}</button>'
+        for name in QUICK_BRANDS
+    )
+
+
+def _detail_form_html() -> str:
+    """접어 둔 상세 조건 — 모든 판정 입력은 여기에만 있다(첫 화면에는 없다)."""
+    money_fields = "".join([
+        _field("franchise_fee_krw", "가맹비", hint="예: 1100만원", extra=' inputmode="numeric"'),
+        _field("education_fee_krw", "가맹교육비", hint="예: 330만원", extra=' inputmode="numeric"'),
+        _field("deposit_krw", "가맹보증금", hint="예: 1000만원", extra=' inputmode="numeric"'),
+        _field("interior_krw", "인테리어 비용", hint="예: 5500만원", extra=' inputmode="numeric"'),
+        _field("equipment_krw", "설비·집기", hint="예: 2000만원", extra=' inputmode="numeric"'),
+        _field("other_krw", "기타 비용", hint="예: 초도물량·간판", extra=' inputmode="numeric"'),
+    ])
+    return f"""
+<p class="hint">계약 조건을 넣으면 위험 신호를 계산합니다. 모르는 항목은 비워 두세요 — 비운 항목은
+  '괜찮다'가 아니라 <b>되물어볼 질문</b>으로 돌려드립니다. 이름·연락처·주민등록번호는 받지 않고,
+  입력값은 서버에 저장하지 않습니다.</p>
+
+<h4 class="group-title">자주 오는 상황으로 채우기</h4>
+<div class="presets">{_presets_html()}</div>
+
+<div class="group">
+  <h4>1. 계약 일정</h4>
+  <div class="grid">
+    {_field("disclosure_days_before", "정보공개서 받은 뒤 지난 날", kind="number",
+            hint="당일이면 0. 14일(자문 시 7일) 전에 계약·입금하면 위반입니다.", extra=' min="0" step="1"')}
+    {_field("contract_doc_days_before", "계약서 초안 받은 뒤 지난 날", kind="number",
+            hint="계약서도 같은 숙고기간이 적용됩니다.", extra=' min="0" step="1"')}
+    {_select_field("advisor_reviewed", "변호사·가맹거래사 자문", [("", "모름"), ("true", "받음"), ("false", "안 받음")],
+                   "자문을 받으면 숙고기간이 7일로 줄어듭니다.")}
+  </div>
+</div>
+
+<div class="group">
+  <h4>2. 돈</h4>
+  <div class="grid three">
+    {money_fields}
+    <div class="full"><span class="inline-sum" id="money-sum">총투자: 항목을 넣으면 자동으로 합산합니다.</span></div>
+  </div>
+  <div class="grid" style="margin-top:14px">
+    {_select_field("payment_route", SELECTS[0][1], SELECTS[0][2], SELECT_HINTS["payment_route"])}
+    {_field("penalty_ratio_pct", "중도해지 위약금(총투자 대비 %)", kind="number",
+            hint="모르면 비워 두세요. 20% 이상이면 신호입니다.", extra=' min="0" step="1"')}
+  </div>
+</div>
+
+<div class="group">
+  <h4>3. 계약 조건</h4>
+  <div class="grid">
+    {_select_field("interior_designated", SELECTS[1][1], SELECTS[1][2], SELECT_HINTS["interior_designated"])}
+    {_select_field("territory", SELECTS[2][1], SELECTS[2][2], SELECT_HINTS["territory"])}
+    {_select_field("ad_cost_burden", SELECTS[3][1], SELECTS[3][2], SELECT_HINTS["ad_cost_burden"])}
+    {_field("termination_grace_months", "본부 해지 시 유예기간(개월)", kind="number",
+            hint="법은 2개월 이상 유예와 서면 2회 통지를 요구합니다.", extra=' min="0" step="1"')}
+    {_field("renewal_years", "최초 포함 전체 계약기간(년)", kind="number",
+            hint="갱신 요구권은 전체 10년을 넘지 않습니다.", extra=' min="0" step="1"')}
+    {_select_field("sales_target", "판매목표 강제", YES_NO_UNKNOWN,
+                   "목표 미달 시 불이익이 있으면 불공정거래행위가 될 수 있습니다.")}
+    {_select_field("supplier_designated", "거래처(공급처) 지정", YES_NO_UNKNOWN,
+                   "특정 업체와만 거래하도록 강제하면 구입강제가 될 수 있습니다.")}
+    {_select_field("mandatory_purchase", SELECTS[8][1], SELECTS[8][2],
+                   "필수품목으로 묶인 물품이 있는지 확인하세요.")}
+    {_select_field("price_fixing", SELECTS[9][1], SELECTS[9][2],
+                   "본부가 판매가격을 정하면 가격 구속 유형을 검토할 수 있습니다.")}
+    {_select_field("essential_price_hidden", "필수품목 단가·산정기준 미공개", YES_NO_UNKNOWN,
+                   "단가를 나중에 알려 주겠다고 하면 매입가를 비교할 기준이 없습니다.")}
+    {_select_field("essential_items_broad", "일반 공산품까지 필수품목", YES_NO_UNKNOWN,
+                   "가맹사업과 무관한 물품을 필수품목으로 묶으면 구입강제가 될 수 있습니다.")}
+    {_select_field("margin_raise_unilateral", "차액가맹금 일방 인상", YES_NO_UNKNOWN,
+                   "적정 도매가격을 넘는 대가를 본부가 일방적으로 올리는지 확인하세요.")}
+    {_select_field("resale_price_bound", "판매가격 유지·변경 제한", YES_NO_UNKNOWN,
+                   "본부가 정한 가격을 유지하게 하면 가격 구속 유형을 검토할 수 있습니다.")}
+    {_select_field("discount_forbidden", "할인 금지", YES_NO_UNKNOWN,
+                   "할인 권한이 점주에게 있는지 계약서에서 확인하세요.")}
+  </div>
+</div>
+
+<div class="group">
+  <h4>4. 본부 이력·매출</h4>
+  <div class="grid">
+    {_select_field("legal_violation", SELECTS[6][1], SELECTS[6][2],
+                   "공정위 시정조치·과징금·형벌선고 이력을 확인했는지 답해 주세요.")}
+    {_select_field("disclosure_registered", SELECTS[7][1], SELECTS[7][2],
+                   "가맹사업정보제공시스템에서 등록 정보공개서를 봤는지 답해 주세요.")}
+    {_field("closure_rate_3y_pct", "최근 3년 폐점률(%)", kind="number",
+            hint="모르면 비워 두세요. 15% 이상이면 위험 높음입니다.", extra=' min="0" step="1"')}
+    {_select_field("revenue_written", SELECTS[4][1], SELECTS[4][2],
+                   "매출을 언급했다면 서면을 요구하세요.")}
+    {_select_field("revenue_estimate_doc", SELECTS[5][1], SELECTS[5][2],
+                   "예상매출액 산정서와 산출근거를 받았는지 답해 주세요.")}
+    {_field("revenue_claim_ko", "본부가 한 매출 관련 말", hint="예: 월 매출 5천 보장",
+            extra=' autocomplete="off"')}
+  </div>
+</div>
+"""
 
 
 def _scan_card_html() -> str:
@@ -380,8 +567,8 @@ def _scan_card_html() -> str:
     return f"""
 <section class="card" id="scan-card">
   <h2>특약·계약서 문구 1초 스캔</h2>
-  <p class="sub">본부가 보낸 계약서·특약·안내 문구를 그대로 붙여 넣으면, 가맹사업법·시행령 별표 2의
-    불공정 유형 {len(engine.CONTRACT_RULES)}개와 대조해 <b>확인이 필요한 문구</b>와 본부에 요청할 수정 문구를 짚어 줍니다.
+  <p class="sub">본부가 보낸 계약서·특약 문구를 그대로 붙여 넣으면 불공정 유형 {len(engine.CONTRACT_RULES)}개와
+    대조해 <b>확인이 필요한 문구</b>와 본부에 요청할 수정 문구를 짚어 줍니다.
     붙여넣은 문구는 저장하지 않으며, 잡히는 문구가 없어도 '안전'을 뜻하지 않습니다.</p>
   <div class="scan-samples">{buttons}</div>
   <label class="field"><span class="lab">계약서·특약 문구<span class="opt">붙여넣기 · {engine.SCAN_MAX_CHARS:,}자까지</span></span>
@@ -397,36 +584,6 @@ def _scan_card_html() -> str:
 """
 
 
-
-def _brand_card_html() -> str:
-    """브랜드 정보공개서 조회 카드 — 판정 폼과 분리된 입력(조회어는 저장하지 않는다)."""
-    meta = brand_index.meta()
-    if meta.get("available"):
-        scope = (f"등록 브랜드 <b>{int(meta.get('count') or 0):,}건</b> · "
-                 f"{meta.get('year')}년 기준 · 색인 갱신 {str(meta.get('built_at'))[:10]}")
-    else:
-        scope = "브랜드 색인 미설치 — 실시간 API 로 조회합니다."
-    return f"""
-<section class="card" id="brand-card">
-  <h2>브랜드 정보공개서 조회</h2>
-  <p class="sub">브랜드명(부분 일치)이나 브랜드관리번호(BRD_...)로 공정위 가맹정보에서 조회합니다.
-    본부·업종·가맹사업 개시일·가맹점 수·폐점률을 보여 주고, 정보공개서 원문은 가맹사업정보제공시스템에서
-    확인하도록 안내합니다. <span class="hint">{scope}</span></p>
-  <form id="brand-search" novalidate>
-    <div class="grid">
-      <label class="field"><span class="lab">브랜드명<span class="opt">부분 일치 · 예: BBQ</span></span>
-        <input id="brand-q" type="text" autocomplete="off" placeholder="예: BBQ · 교촌 · 메가커피"></label>
-      <div class="field"><span class="lab">조회<span class="opt">Enter 로도 실행</span></span>
-        <button type="submit" class="primary" id="brand-run">브랜드 조회</button></div>
-    </div>
-  </form>
-  <div class="status" id="brand-status" aria-live="polite"></div>
-  <div id="brand-result" hidden></div>
-  <p class="hint">조회어는 저장하지 않습니다. 결과가 0건일 때만 전화번호·이메일을 지운 뒤 익명 횟수로 남깁니다.
-    0건은 '등록된 브랜드가 없다'도 '문제없다·안전하다'도 아닙니다.</p>
-</section>
-"""
-
 def _siblings_html() -> str:
     """같이 쓰는 서비스 — CLNS(수입·유통)·GRNT(정부지원금)로 가는 한 줄 생태계 링크.
 
@@ -434,7 +591,7 @@ def _siblings_html() -> str:
     (CLNSㆍGRNT 화면의 '같이 쓰는 서비스' 카드와 같은 문구를 쓴다.)
     """
     return f"""
-<section class="card" id="siblings">
+<section class="card quiet" id="siblings">
   <h2>같이 쓰는 서비스</h2>
   <p class="sub">같은 팀이 무료로 운영하는 두 도구입니다. 세 서비스 모두 회원가입ㆍ결제가 없고,
   판정은 공정위ㆍ정부가 공개한 원본 자료로만 합니다.</p>
@@ -456,7 +613,7 @@ def _inquiry_html() -> str:
         ]
     )
     return f"""
-<form id="inquiry" class="card" novalidate>
+<form id="inquiry" class="card quiet" novalidate>
   <h2>검토 요청·문의</h2>
   <p class="sub">브랜드명과 조건을 적어 주시면 같은 기준으로 다시 확인해 드립니다. 연락처는 회신 목적으로만 쓰고 통계에 넣지 않습니다.</p>
   <div class="grid">
@@ -555,6 +712,699 @@ def home_json_ld(root: str) -> str:
             + "</script>")
 
 
+SCRIPT = """
+(function () {
+  "use strict";
+  var PRESETS = __PRESETS__;
+  var SCAN_SAMPLES_TEXT = __SAMPLES__;
+  var QUICK = __QUICK__;
+  var MONEY = ["franchise_fee_krw","education_fee_krw","deposit_krw","interior_krw",
+    "equipment_krw","other_krw"];
+  var form = document.getElementById("check");
+  var resultCard = document.getElementById("result-card");
+  var resultEl = document.getElementById("result");
+  var statusEl = document.getElementById("status");
+  var lastResult = null;
+  var lastBrand = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function won(value) {
+    if (value === null || value === undefined || value === "") return "";
+    var n = Number(String(value).replace(/[^0-9.-]/g,""));
+    if (!isFinite(n) || n <= 0) return String(value);
+    var eok = Math.floor(n / 100000000), man = Math.floor((n % 100000000) / 10000);
+    var out = [];
+    if (eok) out.push(eok.toLocaleString("ko-KR") + "억");
+    if (man) out.push(man.toLocaleString("ko-KR") + "만");
+    return out.length ? out.join(" ") + "원" : n.toLocaleString("ko-KR") + "원";
+  }
+  function moneySum() {
+    var total = 0, any = false;
+    MONEY.forEach(function (name) {
+      var el = $(name); if (!el || !el.value) return;
+      var text = String(el.value).replace(/,/g,"");
+      var mult = 1;
+      if (text.indexOf("억") >= 0) { mult = 100000000; text = text.replace("억",""); }
+      else if (text.indexOf("만") >= 0) { mult = 10000; text = text.replace(/만원?/,""); }
+      var n = parseFloat(text);
+      if (isFinite(n)) { total += n * mult; any = true; }
+    });
+    var sumEl = $("money-sum");
+    if (!sumEl) return;
+    sumEl.textContent = any ? "총투자 합계: " + won(total) + " (입력 항목 단순 합)" :
+      "총투자: 항목을 넣으면 자동으로 합산합니다.";
+  }
+
+  function collect() {
+    var payload = {};
+    var nodes = form.querySelectorAll("input[name],select[name],textarea[name]");
+    Array.prototype.forEach.call(nodes, function (el) {
+      var value = String(el.value || "").trim();
+      if (value) payload[el.name] = value;
+    });
+    return payload;
+  }
+
+  function fill(values) {
+    Object.keys(values).forEach(function (key) {
+      var el = $(key);
+      if (el) el.value = String(values[key]);
+    });
+    moneySum();
+  }
+
+  function post(path, body) {
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (response) {
+      return response.json().then(function (data) { return { ok: response.ok, data: data }; });
+    }).then(function (out) {
+      if (!out.ok || !out.data || out.data.ok === false) {
+        throw new Error((out.data && (out.data.message || out.data.error)) || "요청에 실패했습니다.");
+      }
+      return out.data.result;
+    });
+  }
+
+  function lookup(query) {
+    if (!query) return Promise.resolve(null);
+    var body = /^brd_/i.test(query) ? { brand_code: query } : { brand_name: query };
+    return post("/v1/tools/lookup_brand_disclosure", body).then(function (data) {
+      var brands = data.brands || [];
+      return {
+        brands: brands,
+        count: brands.length,
+        zero: Boolean(data.zero_result) || brands.length === 0,
+        single: brands.length === 1 ? brands[0] : null
+      };
+    }).catch(function () { return null; });
+  }
+
+  function badge(code, label) {
+    return '<span class="badge ' + esc(code) + '">' + esc(label) + '</span>';
+  }
+
+  function riskItem(row) {
+    var refs = (row.law_refs || []).map(function (key) {
+      return '<span class="kbd">' + esc(key) + '</span>';
+    }).join(" ");
+    var why = row.note_ko || row.why_ko || row.category_label_ko || "";
+    return '<div class="risk">' +
+      '<div class="risk-head"><h4>' + esc(row.title_ko) + '</h4>' +
+        badge(row.severity, row.severity_label_ko) + '</div>' +
+      '<p class="why">' + esc(why) + '</p>' +
+      '<details><summary>왜 문제인가 · 물어볼 것</summary><div class="body">' +
+        '<b>이유</b><br>' + esc(row.why_ko) +
+        (row.regret_ko ? '<br><br><b>되돌리기 어려운 점</b><br>' + esc(row.regret_ko) : '') +
+        (row.fix_ko ? '<br><br><b>지금 할 일</b><br>' + esc(row.fix_ko) : '') +
+        (row.ask_ko ? '<br><br><b>물어볼 것</b><br>' + esc(row.ask_ko) : '') +
+      '</div></details>' +
+      (refs ? '<div class="lawbox">근거 조문 ' + refs + '</div>' : '') +
+    '</div>';
+  }
+
+  function lawBoxes(rows, scope) {
+    if (!rows || !rows.length) return "";
+    return '<div class="section"><h3>근거 조문 <span class="count">법제처 OPEN API 실조회</span></h3>' +
+      (scope ? '<p class="hint">' + esc(scope) + '</p>' : '') +
+      rows.map(function (row) {
+        return '<div class="lawbox"><b>' + esc(row.label_ko || row.key) + '</b>' +
+          '<br>' + esc(row.excerpt_ko) +
+          '<span class="src">' + esc(row.effective_on || "") + ' 시행 · ' + esc(row.source_url || "") + '</span></div>';
+      }).join("") + '</div>';
+  }
+
+  function moneyBlock(money) {
+    if (!money || !money.components || !money.components.length) return "";
+    var rows = money.components.map(function (row) {
+      return '<tr><td>' + esc(row.label_ko) + '</td><td class="num">' + esc(row.amount_ko) + '</td>' +
+        '<td class="num">' + (row.share_pct === null || row.share_pct === undefined ? "" : row.share_pct + "%") + '</td></tr>';
+    }).join("");
+    return '<div class="section"><h3>비용 구조 <span class="count">' + esc(money.total_ko || "") + '</span></h3>' +
+      '<table class="money-table"><thead><tr><th>항목</th><th class="num">금액</th><th class="num">비중</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>' +
+      (money.note_ko ? '<p class="hint">' + esc(money.note_ko) + '</p>' : '') + '</div>';
+  }
+
+  // ---- 결과:① 종합 신호 카드 -------------------------------------------
+  function signalBlock(result, risks, brandOne, hasQuick) {
+    var code = (result.verdict || {}).code || "info_needed";
+    var c = result.counts || {};
+    var cov = result.coverage || {};
+    var cls = code === "check_likely" ? "check" : (code === "low_risk" ? "low" : "info");
+    var big, say;
+    if (code === "check_likely") {
+      big = "주의 신호 " + (c.triggered || 0) + "건";
+      say = (risks[0] ? "가장 먼저 볼 것은 ‘" + risks[0].title_ko + "’입니다. " : "") +
+        "아래에서 이유와 본부에 물어볼 것을 확인하세요.";
+    } else if (code === "low_risk") {
+      big = "뚜렷한 위험 신호 없음";
+      say = "입력한 항목에서는 두드러진 신호가 잡히지 않았습니다. 확정 판정이 아니므로 서류 원문과 현장을 따로 확인하세요.";
+    } else {
+      big = "아직 판단하기 이르다";
+      var totalAxes = cov.total_axes || 8;
+      var emptyAxes = Math.max(0, totalAxes - (cov.answered_axes || 0));
+      say = "핵심 항목 " + totalAxes + "개 중 " + emptyAxes + "개가 아직 비어 있습니다. " +
+        (hasQuick ? "아래에서 3개만 답하면 신호가 있는지 좁혀집니다."
+                  : "아래 질문에 답하고 상세 조건을 채우면 신호가 있는지 좁혀집니다.");
+    }
+    var bits = [];
+    if (brandOne && brandOne.brand_name) bits.push(String(brandOne.brand_name));
+    if (brandOne && brandOne.stores_year_end !== null && brandOne.stores_year_end !== undefined) {
+      bits.push("가맹점 " + Number(brandOne.stores_year_end).toLocaleString("ko-KR") + "곳");
+    }
+    bits.push("확인한 항목 " + (cov.answered_axes || 0) + "/" + (cov.total_axes || 8));
+    if (c.high) bits.push("높음 " + c.high + "건");
+    if (c.medium) bits.push("주의 " + c.medium + "건");
+    if (result.risk_score) bits.push("위험 점수 " + result.risk_score);
+    return '<div class="signal ' + cls + '">' +
+      '<p class="state">종합 판정</p>' +
+      '<p class="big">' + esc(big) + '</p>' +
+      '<p class="say">' + esc(say) + '</p>' +
+      '<p class="meta-line">' + esc(bits.join(" · ")) + '</p>' +
+    '</div>';
+  }
+
+  // ---- 결과:② 브랜드 기본 정보 / 비슷한 브랜드 --------------------------
+  function fmtDate(value) {
+    var text = String(value === null || value === undefined ? "" : value);
+    return text.length === 8 ? text.slice(0, 4) + "-" + text.slice(4, 6) + "-" + text.slice(6) : text;
+  }
+
+  function cell(key, value) {
+    return '<div class="cell"><span class="k">' + esc(key) + '</span>' +
+      '<span class="v">' + esc(value || "—") + '</span></div>';
+  }
+
+  function factsBlock(brand, query) {
+    if (!brand) return "";
+    if (brand.count > 1) {
+      var picked = brand.brands.slice(0, 5).map(function (b) {
+        return '<button type="button" class="chip" data-query="' + esc(b.brand_name) + '">' +
+          esc(b.brand_name) + '</button>';
+      }).join("");
+      return '<p class="say">‘' + esc(query) + '’로 ' + brand.count +
+        '개 브랜드가 검색되었습니다. 확인할 브랜드를 눌러 주세요.</p>' +
+        '<div class="chips">' + picked + '</div>';
+    }
+    if (brand.zero) {
+      return '<p class="notice info">‘' + esc(query) +
+        '’로 등록 브랜드를 찾지 못했습니다. 입력한 조건만으로 확인했습니다. ' +
+        '0건은 ‘등록된 브랜드가 없다’는 뜻도, ‘문제없다·안전하다’는 뜻도 아닙니다.</p>';
+    }
+    var b = brand.single || {};
+    var industry = [b.industry_large, b.industry_mid].filter(Boolean).join(" · ");
+    var stores = (b.stores_year_end === null || b.stores_year_end === undefined) ? "—" :
+      Number(b.stores_year_end).toLocaleString("ko-KR") + "곳";
+    var direct = (b.direct_stores === null || b.direct_stores === undefined) ? "—" :
+      Number(b.direct_stores).toLocaleString("ko-KR") + "곳";
+    var html = '<div class="facts">' +
+      cell("브랜드", b.brand_name) +
+      cell("본부", b.hq_name) +
+      cell("업종", industry) +
+      cell("가맹사업 시작", fmtDate(b.started_on)) +
+      cell("가맹점", stores) +
+      cell("직영점", direct) +
+    '</div>';
+    if (stores === "—") {
+      html += '<p class="hint">가맹점 수·폐점률 같은 일부 항목은 공정위 데이터셋 연동 전이라 비어 있을 수 있습니다. ' +
+        '정보공개서 원문에서 확인하세요.</p>';
+    }
+    html += '<p class="hint"><a href="' +
+      esc(b.disclosure_url || "https://franchise.ftc.go.kr") +
+      '" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템에서 정보공개서 원문 보기</a></p>';
+    return html;
+  }
+
+  // ---- 결과:③ 핵심 지표 4개 --------------------------------------------
+  function metric(k, v, d) {
+    return '<div class="metric"><div class="k">' + esc(k) + '</div>' +
+      '<div class="v">' + esc(v) + '</div><div class="d">' + esc(d) + '</div></div>';
+  }
+
+  function metricsBlock(result, brandOne, terms, questions) {
+    var money = result.money || {};
+    var total = money.total_ko || "";
+    var investD = total
+      ? (money.total_source === "computed" ? "입력 항목 단순 합 · 견적서로 다시 확인" : "직접 입력한 금액")
+      : "가맹비·인테리어·보증금을 넣으면 합산합니다";
+    var rate = null, rateSrc = "";
+    if (brandOne && brandOne.closure_rate_pct !== null && brandOne.closure_rate_pct !== undefined) {
+      rate = brandOne.closure_rate_pct + "%";
+      rateSrc = "공정위 공개자료";
+    } else if (terms.closure_rate_3y_pct !== undefined && terms.closure_rate_3y_pct !== null) {
+      rate = terms.closure_rate_3y_pct + "%";
+      rateSrc = "직접 입력값";
+    }
+    var stores = "";
+    if (brandOne && brandOne.stores_year_end !== null && brandOne.stores_year_end !== undefined) {
+      stores = "가맹점 " + Number(brandOne.stores_year_end).toLocaleString("ko-KR") + "곳";
+      if (brandOne.direct_stores) {
+        stores += " · 직영 " + Number(brandOne.direct_stores).toLocaleString("ko-KR") + "곳";
+      }
+    }
+    var legal = "미확인";
+    var legalD = "공정위 시정조치·과징금 이력은 정보공개서로 확인하세요";
+    if (terms.legal_violation === true) {
+      legal = "이력 있음";
+      legalD = "시정조치·과징금 이력을 본부에 서면으로 요구하세요";
+    } else if (terms.legal_violation === false) {
+      legal = "없음(입력 기준)";
+      legalD = "입력한 답 기준입니다. 계약 전 정보공개서로 다시 확인하세요";
+    }
+    var qV = questions.length ? questions.length + "가지" : "—";
+    var qD = questions.length ? questions[0] : "확인할 질문이 없습니다";
+    return '<div class="metrics">' +
+      metric("초기 투자비용", total || "미입력", investD) +
+      metric("폐점률", rate || "미확인",
+             (stores ? stores + " · " : "") + (rate ? rateSrc : "정보공개서·본부에 문의")) +
+      metric("법적 분쟁·행정처분", legal, legalD) +
+      metric("체크할 질문", qV, qD) +
+    '</div>';
+  }
+
+  // ---- 결과:④ 모르는 항목 3개를 그 자리에서 묻기 ------------------------
+  function pickQuick(terms, code) {
+    if (code === "low_risk") return [];
+    var picked = [], index;
+    for (index = 0; index < QUICK.length && picked.length < 3; index++) {
+      var item = QUICK[index];
+      var known = terms && terms[item.field] !== undefined && terms[item.field] !== null;
+      if (!known) picked.push(index);
+    }
+    return picked;
+  }
+
+  function quickBlock(picked) {
+    if (!picked.length) return "";
+    var rows = picked.map(function (idx) {
+      var row = QUICK[idx];
+      var opts = row.opts.map(function (opt, oi) {
+        return '<button type="button" class="opt" data-qi="' + idx + '" data-oi="' + oi + '">' +
+          esc(opt.l) + '</button>';
+      }).join("");
+      return '<div class="qq"><span>' + esc(row.q) + '</span><div class="opts">' + opts + '</div></div>';
+    }).join("");
+    return '<div class="quick"><h3>' + picked.length + '가지만 답하면 더 정확해집니다</h3>' +
+      '<p class="hint">고르면 바로 다시 확인합니다. 나머지 조건은 위 ‘상세 조건 입력’에서 넣을 수 있습니다.</p>' +
+      rows + '</div>';
+  }
+
+  // ---- 결과:⑤ 접어 둔 자세히 보기 --------------------------------------
+  function detailsBlock(result, risks, questions) {
+    var html = "";
+    var rest = risks.slice(3);
+    if (rest.length) {
+      html += '<h3>그 밖의 위험 신호 <span class="count">' + rest.length + '건</span></h3>' +
+        rest.map(riskItem).join("");
+    }
+    var unknown = result.unknown_points || [];
+    if (unknown.length) {
+      html += '<h3>아직 모르는 항목 <span class="count">' + unknown.length + '건</span></h3>' +
+        '<ul class="clean">' + unknown.slice(0, 10).map(function (row) {
+          return '<li>' + esc(row.title_ko) + '</li>';
+        }).join("") + '</ul>';
+      if (unknown.length > 10) {
+        html += '<p class="hint">그 밖에 ' + (unknown.length - 10) + '개 항목이 더 있습니다.</p>';
+      }
+    }
+    var checklist = result.checklist_ko || [];
+    if (checklist.length) {
+      html += '<h3>계약 전 체크리스트</h3><ul class="clean">' +
+        checklist.map(function (item) { return '<li>' + esc(item) + '</li>'; }).join("") + '</ul>';
+    }
+    if (questions.length > 5) {
+      html += '<h3>물어볼 것이 더 있습니다</h3><ul class="clean">' +
+        questions.slice(5).map(function (q) { return '<li>' + esc(q) + '</li>'; }).join("") + '</ul>';
+    }
+    html += moneyBlock(result.money);
+    html += lawBoxes(result.law_basis, result.law_basis_scope_ko);
+    var steps = result.next_steps || [];
+    if (steps.length) {
+      html += '<div class="section"><h3>다음 단계</h3><ol class="steps">' +
+        steps.map(function (step) {
+          var link = step.url ? ' <a href="' + esc(step.url) + '" target="_blank" rel="noopener noreferrer">열기</a>' : "";
+          return '<li><b>' + esc(step.title_ko) + '</b> — ' + esc(step.detail_ko) + link + '</li>';
+        }).join("") + '</ol></div>';
+    }
+    var support = result.startup_support || {};
+    if (support.url) {
+      html += '<div class="linkcard"><p>' + esc(support.note_ko) + '</p>' +
+        '<a class="btn-link" href="' + esc(support.url) + '" target="_blank" rel="noopener noreferrer">' +
+        esc(support.name_ko || "지원금 확인") + '</a></div>';
+    }
+    return '<details class="morebox"><summary>자세히 보기 — 모르는 항목·체크리스트·근거 조문</summary>' +
+      '<div class="more-inner">' + html + '</div></details>';
+  }
+
+  function render(result, brand) {
+    lastResult = result;
+    lastBrand = brand;
+    var risks = result.risk_points || [];
+    var questions = result.questions_ko || [];
+    var terms = result.terms_used || {};
+    var brandOne = brand && brand.single ? brand.single : null;
+    var code = (result.verdict || {}).code || "info_needed";
+    var picked = pickQuick(terms, code);
+    var quick = quickBlock(picked);
+    // 방금 그 자리에서 물은 항목은 '물어볼 질문' 목록에서 빼서 같은 말을 두 번 하지 않는다.
+    var asked = picked.map(function (idx) { return QUICK[idx].match || ""; });
+    questions = questions.filter(function (q) {
+      return !asked.some(function (key) { return key && q.indexOf(key) >= 0; });
+    });
+    var html = signalBlock(result, risks, brandOne, quick !== "");
+    html += factsBlock(brand, (($("brand_name") || {}).value || "").trim());
+    html += metricsBlock(result, brandOne, terms, questions);
+    if (risks.length) {
+      html += '<h3 class="result-head">먼저 확인할 것</h3>' + risks.slice(0, 3).map(riskItem).join("");
+    }
+    html += quick;
+    if (questions.length) {
+      html += '<h3 class="result-head">본부에 물어볼 질문</h3><ul class="clean">' +
+        questions.slice(0, 5).map(function (q) { return '<li>' + esc(q) + '</li>'; }).join("") + '</ul>';
+    }
+    html += detailsBlock(result, risks, questions);
+    html += '<p class="hint">' + esc(result.disclaimer_ko || "") + '</p>';
+    resultEl.innerHTML = html;
+    resultCard.hidden = false;
+    resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function run() {
+    var payload = collect();
+    var query = String(($("brand_name") || {}).value || "").trim().slice(0, 60);
+    if (!query && !Object.keys(payload).length) {
+      statusEl.className = "status err";
+      statusEl.textContent = "브랜드명이나 업종을 넣어 주세요.";
+      var empty = $("brand_name");
+      if (empty) empty.focus();
+      return;
+    }
+    statusEl.className = "status";
+    statusEl.textContent = query ? "공정위 자료와 법 조문을 확인하는 중…" : "법령 조문과 대조하는 중…";
+    var button = $("run");
+    if (button) button.disabled = true;
+    lookup(query).then(function (brand) {
+      if (brand && brand.single) {
+        if (brand.single.industry_mid) payload.industry = brand.single.industry_mid;
+      }
+      return post("/v1/tools/check_franchise_risk", payload).then(function (result) {
+        return { result: result, brand: brand };
+      });
+    }).then(function (out) {
+      render(out.result, out.brand);
+      statusEl.textContent = "확인 완료. 확정 판정이 아니므로 서류 원문과 함께 확인하세요.";
+    }).catch(function (error) {
+      statusEl.className = "status err";
+      statusEl.textContent = "오류: " + error.message;
+    }).finally(function () {
+      if (button) button.disabled = false;
+    });
+  }
+
+  function applyQuick(button) {
+    var item = QUICK[Number(button.getAttribute("data-qi"))];
+    if (!item) return;
+    var opt = item.opts[Number(button.getAttribute("data-oi"))];
+    if (!opt) return;
+    Object.keys(opt.set).forEach(function (field) {
+      var el = $(field);
+      if (el) el.value = String(opt.set[field]);
+    });
+    moneySum();
+    run();
+  }
+
+  // 첫 화면 예시·결과 안의 브랜드 칩·한 번에 답하기 — 한 곳에서 처리한다.
+  document.body.addEventListener("click", function (event) {
+    var node = event.target;
+    while (node && node !== document.body && node.getAttribute &&
+           !node.getAttribute("data-query") && !node.getAttribute("data-qi")) {
+      node = node.parentNode;
+    }
+    if (!node || node === document.body || !node.getAttribute) return;
+    if (node.getAttribute("data-query")) {
+      var input = $("brand_name");
+      if (input) input.value = node.getAttribute("data-query");
+      run();
+      return;
+    }
+    applyQuick(node);
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("button.preset"), function (button) {
+    button.addEventListener("click", function () {
+      var name = button.getAttribute("data-preset");
+      fill(PRESETS[name] || {});
+      statusEl.className = "status";
+      statusEl.textContent = "예시 조건을 채웠습니다: " + button.querySelector(".t").textContent;
+      run();
+    });
+  });
+
+  form.addEventListener("submit", function (event) { event.preventDefault(); run(); });
+  MONEY.forEach(function (name) {
+    var el = $(name); if (el) el.addEventListener("input", moneySum);
+  });
+
+  var copyButton = $("copy");
+  function copyStatus(message) { $("copy-status").textContent = message; }
+  function copyText(text, okMessage) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { copyStatus(okMessage); })
+        .catch(function () { fallback(text, okMessage); });
+    } else { fallback(text, okMessage); }
+    function fallback(value, message) {
+      var area = document.createElement("textarea");
+      area.value = value; area.setAttribute("readonly", "readonly");
+      area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.appendChild(area); area.select();
+      try { document.execCommand("copy"); copyStatus(message); }
+      catch (error) { copyStatus("복사 실패 — 화면의 내용을 직접 선택해 주세요."); }
+      document.body.removeChild(area);
+    }
+  }
+
+  // 비식별 공유 링크 — 브랜드명만 담고 금액·조건·연락처는 담지 않는다.
+  function shareLink() {
+    var el = $("brand_name");
+    var brand = String((el && el.value) || "").trim().slice(0, 60);
+    var base = location.origin + "/";
+    return brand ? base + "?brand=" + encodeURIComponent(brand) + "#check" : base + "#check";
+  }
+
+  copyButton.addEventListener("click", function () {
+    if (!lastResult) { copyStatus("먼저 리스크 확인하기를 눌러 주세요."); return; }
+    var verdict = lastResult.verdict || {};
+    var lines = ["FRNC 리스크 체크 — " + (verdict.label_ko || ""),
+      "위험 점수 " + lastResult.risk_score + " (신호 " + (lastResult.counts || {}).triggered + "건)",
+      lastResult.summary_ko || ""];
+    (lastResult.risk_points || []).forEach(function (row) {
+      lines.push("- [" + row.severity_label_ko + "] " + row.title_ko + " — " + (row.note_ko || ""));
+    });
+    (lastResult.questions_ko || []).slice(0, 5).forEach(function (q) { lines.push("? " + q); });
+    lines.push("확정 판정 아님 · " + location.origin);
+    copyText(lines.join("\\n"), "복사됨");
+  });
+
+  $("share").addEventListener("click", function () {
+    copyText(shareLink(), "공유 링크 복사됨 — 브랜드명만 담깁니다.");
+  });
+
+  // ?brand=...#check 로 들어오면 브랜드명만 채운다(금액·조건은 손대지 않는다).
+  function prefillFromUrl() {
+    var brand = "";
+    try {
+      if (window.URLSearchParams) {
+        brand = new URLSearchParams(location.search).get("brand") || "";
+      }
+    } catch (error) { brand = ""; }
+    brand = String(brand).trim().slice(0, 60);
+    if (!brand) return;
+    var el = $("brand_name");
+    if (!el) return;
+    el.value = brand;
+    statusEl.className = "status";
+    statusEl.textContent = "공유 링크에서 브랜드명만 채웠습니다. 리스크 확인하기를 눌러 주세요.";
+  }
+
+  // 무료 베타·소개 글 유입 태그(0.1.7) — ?cohort=beta_pilot 로 들어온 링크만 문의에 붙인다.
+  // 서버와 같은 규칙(영문 소문자·숫자와 . _ : -, 40자)을 먼저 확인해 잘못된 값이면 보내지 않는다.
+  function cohortTag() {
+    try {
+      var value = String(new URLSearchParams(location.search).get("cohort") || "").trim().toLowerCase();
+      return /^[a-z0-9][a-z0-9._:-]{0,39}$/.test(value) ? value : "";
+    } catch (error) { return ""; }
+  }
+
+  var inquiry = $("inquiry");
+  inquiry.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var status = $("inq-status");
+    var payload = {
+      contact: $("inq-contact").value,
+      topic: $("inq-topic").value,
+      message: $("inq-message").value,
+      cohort: cohortTag()
+    };
+    status.className = "status";
+    status.textContent = "보내는 중…";
+    fetch("/v1/inquiry", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (response) {
+      return response.json().then(function (data) { return { ok: response.ok, data: data }; });
+    }).then(function (out) {
+      if (!out.data || !out.data.ok) {
+        status.className = "status err";
+        status.textContent = (out.data && out.data.message_ko) || "접수하지 못했습니다.";
+        return;
+      }
+      status.textContent = (out.data.message_ko || "접수됐습니다.") +
+        (out.data.receipt ? " 접수번호 " + out.data.receipt : "");
+      $("inq-message").value = "";
+    }).catch(function () {
+      status.className = "status err";
+      status.textContent = "네트워크 오류로 접수하지 못했습니다.";
+    });
+  });
+
+  // --- 특약·계약서 문구 스캔 ----------------------------------------------
+  var scanText = $("scan-text");
+  var scanResultEl = $("scan-result");
+  var scanStatusEl = $("scan-status");
+
+  function scanCount() {
+    var el = $("scan-count");
+    if (!el || !scanText) return;
+    var length = scanText.value.length;
+    var max = Number(scanText.getAttribute("data-max")) || 0;
+    el.textContent = max && length > max ?
+      length.toLocaleString("ko-KR") + "자 — 앞 " + max.toLocaleString("ko-KR") + "자만 스캔합니다" :
+      length.toLocaleString("ko-KR") + "자";
+  }
+
+  function scanFinding(row) {
+    var refs = (row.law_refs || []).map(function (key) {
+      return '<span class="kbd">' + esc(key) + '</span>';
+    }).join(" ");
+    return '<div class="finding">' +
+      '<div class="finding-head"><h4>' + esc(row.title_ko) + '</h4>' +
+        badge(row.severity, row.severity_label_ko) + '</div>' +
+      '<blockquote class="quote">' + esc(row.matched_text_ko) + '</blockquote>' +
+      '<p class="why">' + esc(row.note_ko || row.category_label_ko) + '</p>' +
+      '<p class="req"><b>본부에 요청할 문구</b><br>' + esc(row.request_edit_ko) + '</p>' +
+      '<details><summary>왜 문제인가 · 물어볼 것</summary>' +
+        '<div class="body"><b>이유</b><br>' + esc(row.why_ko) +
+        '<br><br><b>물어볼 것</b><br>' + esc(row.ask_ko) + '</div>' +
+      '</details>' +
+      '<div class="lawbox">근거 조문 ' + refs + '</div>' +
+    '</div>';
+  }
+
+  function scanRender(data) {
+    var counts = data.counts || {};
+    var verdict = data.verdict || {};
+    var html = '<div class="verdict"><div><h3>' + esc(verdict.label_ko || "") + '</h3>' +
+      '<p class="kv">확인 필요 문구 ' + esc(counts.flagged || 0) + '건(높음 ' +
+      esc(counts.high || 0) + ' · 주의 ' + esc(counts.medium || 0) + ') · 대조한 유형 ' +
+      esc(counts.rules_checked || 0) + '개</p></div>' +
+      badge(verdict.code, verdict.label_ko) + '</div>' +
+      '<p class="summary">' + esc(data.summary_ko) + '</p>' +
+      '<p class="notice" style="margin-top:12px">' + esc(data.not_a_clearance_ko) + '</p>';
+    var findings = data.findings || [];
+    if (findings.length) {
+      html += '<div class="section"><h3>확인이 필요한 문구 <span class="count">' +
+        findings.length + '건</span></h3>' + findings.map(scanFinding).join("") + '</div>';
+    }
+    var checks = data.checks_ko || [];
+    if (checks.length) {
+      html += '<div class="section"><h3>대조한 유형 <span class="count">' + checks.length +
+        '개</span></h3><ul class="scan-checks">' + checks.map(function (row) {
+          return '<li><b>' + esc(row.title_ko) + '</b> — ' + esc(row.result_ko) + '</li>';
+        }).join("") + '</ul></div>';
+    }
+    html += lawBoxes(data.law_basis, data.law_basis_scope_ko);
+    if ((data.questions_ko || []).length) {
+      html += '<div class="section"><h3>계약 전에 확인할 것</h3><ul class="clean">' +
+        data.questions_ko.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join("") +
+        '</ul></div>';
+    }
+    html += '<p class="hint">' + esc(data.disclaimer_ko) + '</p>';
+    scanResultEl.innerHTML = html;
+    scanResultEl.hidden = false;
+  }
+
+  function scanRun() {
+    if (!scanText) return;
+    var text = String(scanText.value || "").trim();
+    if (!text) {
+      scanStatusEl.className = "status err";
+      scanStatusEl.textContent = "계약서·특약 문구를 붙여 넣어 주세요.";
+      return;
+    }
+    var button = $("scan-run");
+    scanStatusEl.className = "status";
+    scanStatusEl.textContent = "문구를 조문 유형과 대조하는 중…";
+    button.disabled = true;
+    post("/v1/tools/scan_contract_text", { text: text }).then(function (result) {
+      scanRender(result);
+      scanStatusEl.textContent = "스캔 완료. 잡히는 문구가 없어도 원문 전체 검토는 따로 필요합니다.";
+    }).catch(function (error) {
+      scanStatusEl.className = "status err";
+      scanStatusEl.textContent = "오류: " + error.message;
+    }).finally(function () {
+      button.disabled = false;
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("button.sample"), function (button) {
+    button.addEventListener("click", function () {
+      var name = button.getAttribute("data-sample");
+      var sample = SCAN_SAMPLES_TEXT[name];
+      if (!sample || !scanText) return;
+      scanText.value = sample;
+      scanCount();
+      scanRun();
+    });
+  });
+
+  if (scanText) {
+    scanText.addEventListener("input", scanCount);
+    scanCount();
+  }
+  $("scan-run").addEventListener("click", scanRun);
+  $("scan-clear").addEventListener("click", function () {
+    if (scanText) scanText.value = "";
+    scanCount();
+    scanResultEl.hidden = true;
+    scanStatusEl.textContent = "";
+  });
+
+  moneySum();
+  prefillFromUrl();
+})();
+"""
+
+
+def _script_html() -> str:
+    presets_json = json.dumps({preset["id"]: preset["values"] for preset in PRESETS},
+                              ensure_ascii=False)
+    samples_json = json.dumps({row["id"]: row["text"] for row in SCAN_SAMPLES},
+                              ensure_ascii=False)
+    quick_json = json.dumps(QUICK_ANSWERS, ensure_ascii=False)
+    return (SCRIPT.replace("__PRESETS__", presets_json)
+                  .replace("__SAMPLES__", samples_json)
+                  .replace("__QUICK__", quick_json))
+
+
 def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     from . import guides
 
@@ -563,16 +1413,12 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     law = engine.law_meta()
     # 실제 동작을 그대로 적는다 — '승인 전이라 샘플' 같은 고정 문구를 쓰지 않는다.
     state_note = live_api.state_note_ko(state=data_state)
-    presets_json = json.dumps({preset["id"]: preset["values"] for preset in PRESETS},
-                              ensure_ascii=False)
-    scan_samples_json = json.dumps({row["id"]: row["text"] for row in SCAN_SAMPLES},
-                                   ensure_ascii=False)
-    import os as _os
     _env = dict(_os.environ)
     _env.setdefault("GOOGLE_SITE_VERIFICATION", "3KG1TCarS7RYxIpCqZ0fv8yIm8S0vBp7k1NNlVlWoxg")
     _env.setdefault("NAVER_SITE_VERIFICATION", "f12b91bab9bab718349e637c8a043e5703a4be35")
     meta_tags = site_verification.meta_tags(_env)
     json_ld = home_json_ld(SERVICE_URL)
+    script = _script_html()
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -605,44 +1451,41 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
       <div>
         <h1>{SERVICE_NAME} · {SERVICE_TITLE_KO}</h1>
         <p>{SERVICE_TAGLINE}</p>
-        <p class="en">{SERVICE_SUBTITLE_EN}</p>
       </div>
     </div>
     <div>
-      <span class="pill">v{__version__}</span>
-      <span class="pill ghost">확정 판정 아님</span>
+      <span class="pill ghost">v{__version__}</span>
       <a class="pill ghost" href="/guides/">가이드 {len(guides.GUIDES)}종</a>
     </div>
   </header>
 
-  <p class="notice info" id="data-state-note">{state_note}
-    <br>법령 근거: 법제처 OPEN API 실조회 · 조문 {law.get('article_count', 0)}개 · 함정 케이스 {len(engine.trap_cases())}건.
-    조회 결과가 0건이어도 '안전'을 뜻하지는 않습니다.</p>
-
-  <section class="card" style="margin-top:14px">
-    <h2>1초 프리셋</h2>
-    <p class="sub">자주 오는 네 가지 상황입니다. 누르면 조건이 채워지고 바로 판정합니다.</p>
-    <div class="presets">{_presets_html()}</div>
+  <main>
+  <section class="card hero" id="brand-card">
+    <h2>어떤 브랜드를 확인할까요?</h2>
+    <p class="lead">브랜드명이나 업종을 넣으면 공정위 공개자료와 가맹사업법 조문으로
+      <b>계약 전에 확인할 점</b>을 정리해 드립니다. 무료 · 회원가입 없음.</p>
+    <form id="check" novalidate>
+      <div class="search-row">
+        <input id="brand_name" name="brand_name" type="text" autocomplete="off"
+               placeholder="예: 메가커피, 굽네치킨, 치킨" aria-label="브랜드명 또는 업종">
+        <button type="submit" class="primary big" id="run">리스크 확인하기</button>
+      </div>
+      <div class="chips">
+        <span class="chips-label">예시</span>
+        {_chips_html()}
+      </div>
+      <details class="more" id="more">
+        <summary>상세 조건 입력 <span class="note">선택 · 모르면 비워 두세요</span></summary>
+        <div class="more-body">
+        {_detail_form_html()}
+        </div>
+      </details>
+    </form>
   </section>
 
-  {_brand_card_html()}
+  <div class="status" id="status" aria-live="polite"></div>
 
-  <form class="card" id="check" novalidate>
-    <h2>조건 입력</h2>
-    <p class="sub">모르는 항목은 비워 두세요. 비운 항목은 '괜찮다'가 아니라 <b>되물어볼 질문</b>으로 돌려드립니다.
-      이름·연락처·주민등록번호는 받지 않고, 입력값은 서버에 저장하지 않습니다.
-      (브랜드 조회 결과가 0건일 때만 조회어를 전화번호·이메일 없이 익명 집계합니다.)</p>
-    {_form_html()}
-    <div class="actions">
-      <button type="submit" class="primary" id="run">10초 체크</button>
-      <button type="button" class="ghost" id="reset">입력 지우기</button>
-      <span class="hint">Enter 로도 실행됩니다.</span>
-    </div>
-    <div class="status" id="status" aria-live="polite"></div>
-  </form>
-
-  <section class="card" id="result-card" hidden>
-    <h2>결과</h2>
+  <section class="card" id="result-card" hidden aria-label="확인 결과">
     <div id="result"></div>
     <div class="copyrow">
       <button type="button" class="ghost" id="copy">요약 복사</button>
@@ -653,8 +1496,8 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
 
   {_scan_card_html()}
 
-  <section class="card">
-    <h2>이 서비스가 보는 8개 축</h2>
+  <section class="card quiet">
+    <h2>이 서비스가 보는 것</h2>
     <p class="sub">법이 직접 정한 절차와, 계약서에서 실제로 문제가 되는 조항만 봅니다.</p>
     <ul class="clean">
       <li><b>숙고기간</b> — 정보공개서·계약서를 받은 뒤 14일(자문 시 7일) 전 계약·입금 금지</li>
@@ -674,7 +1517,7 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     </div>
   </section>
 
-  <section class="card">
+  <section class="card quiet">
     <h2>계약 전 자주 묻는 질문</h2>
     <p class="sub">정보공개서·가맹금·영업지역·해지·갱신을 조문과 함께 정리했습니다.</p>
     <ul class="clean">{_guides_teaser_html()}</ul>
@@ -686,9 +1529,12 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
   {_inquiry_html()}
 
   <p class="foot">
-    {SERVICE_NAME}는 입력한 조건과 공개 법령 조문을 대조하는 참고용 사전 점검 도구입니다.
+    <span id="data-state-note">{state_note} 법령 근거: 법제처 OPEN API 실조회 · 조문 {law.get('article_count', 0)}개 · 함정 케이스 {len(engine.trap_cases())}건.</span>
+    <br>브랜드 조회 결과가 0건이어도 '등록된 브랜드가 없다'도 '문제없다·안전하다'도 아닙니다.
+    <br>{SERVICE_NAME}는 입력한 조건과 공개 법령 조문을 대조하는 참고용 사전 점검 도구입니다. 확정 판정 아님 —
     위법 여부·계약 효력을 확정하지 않고, 계약서 검토·법률 자문·신고 대행을 하지 않습니다.
-    최종 판단은 변호사·가맹거래사 자문으로 하세요. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
+    최종 판단은 변호사·가맹거래사 자문으로 하세요.
+    <br>정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
     · <a href="/llms.txt">llms.txt</a> · <a href="/v1/meta">서비스 상태</a>
     · <a href="/guides/">가이드 {len(guides.GUIDES)}종</a>
     <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
@@ -696,539 +1542,10 @@ def render_page(meta: Optional[Dict[str, Any]] = None) -> str:
     <br>고지 — <a href="/privacy">개인정보 처리방침</a> · <a href="/terms">이용약관</a>
     · <a href="/about">서비스 소개</a>
   </p>
+  </main>
 </div>
 
-<script>
-(function () {{
-  "use strict";
-  var PRESETS = {presets_json};
-  var SCAN_SAMPLES_TEXT = {scan_samples_json};
-  var MONEY = ["franchise_fee_krw","education_fee_krw","deposit_krw","interior_krw",
-    "equipment_krw","other_krw"];
-  var form = document.getElementById("check");
-  var resultCard = document.getElementById("result-card");
-  var resultEl = document.getElementById("result");
-  var statusEl = document.getElementById("status");
-  var lastResult = null;
-
-  function $(id) {{ return document.getElementById(id); }}
-  function esc(value) {{
-    return String(value === null || value === undefined ? "" : value)
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-  }}
-  function won(value) {{
-    if (value === null || value === undefined || value === "") return "";
-    var n = Number(String(value).replace(/[^0-9.-]/g,""));
-    if (!isFinite(n) || n <= 0) return String(value);
-    var eok = Math.floor(n / 100000000), man = Math.floor((n % 100000000) / 10000);
-    var out = [];
-    if (eok) out.push(eok.toLocaleString("ko-KR") + "억");
-    if (man) out.push(man.toLocaleString("ko-KR") + "만");
-    return out.length ? out.join(" ") + "원" : n.toLocaleString("ko-KR") + "원";
-  }}
-  function moneySum() {{
-    var total = 0, any = false;
-    MONEY.forEach(function (name) {{
-      var el = $(name); if (!el || !el.value) return;
-      var text = String(el.value).replace(/,/g,"");
-      var mult = 1;
-      if (text.indexOf("억") >= 0) {{ mult = 100000000; text = text.replace("억",""); }}
-      else if (text.indexOf("만") >= 0) {{ mult = 10000; text = text.replace(/만원?/,""); }}
-      var n = parseFloat(text);
-      if (isFinite(n)) {{ total += n * mult; any = true; }}
-    }});
-    var sumEl = $("money-sum");
-    if (!sumEl) return;
-    sumEl.textContent = any ? "총투자 합계: " + won(total) + " (입력 항목 단순 합)" :
-      "총투자: 항목을 넣으면 자동으로 합산합니다.";
-  }}
-
-  function collect() {{
-    // 폼에 실제로 있는 name 만 모은다(화면과 요청이 어긋나지 않게).
-    var payload = {{}};
-    var nodes = form.querySelectorAll("input[name],select[name],textarea[name]");
-    Array.prototype.forEach.call(nodes, function (el) {{
-      var value = String(el.value || "").trim();
-      if (value) payload[el.name] = value;
-    }});
-    return payload;
-  }}
-
-  function fill(values) {{
-    Object.keys(values).forEach(function (key) {{
-      var el = $(key);
-      if (el) el.value = String(values[key]);
-    }});
-    moneySum();
-  }}
-
-  function badge(code, label) {{
-    return '<span class="badge ' + esc(code) + '">' + esc(label) + '</span>';
-  }}
-
-  function riskItem(row) {{
-    var refs = (row.law_refs || []).map(function (key) {{
-      return '<span class="kbd">' + esc(key) + '</span>';
-    }}).join(" ");
-    return '<div class="risk">' +
-      '<div class="risk-head"><h4>' + esc(row.title_ko) + '</h4>' +
-        badge(row.severity, row.severity_label_ko) + '</div>' +
-      '<p class="why">' + esc(row.note_ko || row.category_label_ko) + (row.note_ko && row.category_label_ko ? " · " + esc(row.category_label_ko) : "") + '</p>' +
-      '<details><summary>왜 문제인가 · 무엇을 확인하나</summary>' +
-        '<div class="body"><b>이유</b><br>' + esc(row.why_ko) +
-        '<br><br><b>되돌리기 어려운 점</b><br>' + esc(row.regret_ko) +
-        '<br><br><b>지금 할 일</b><br>' + esc(row.fix_ko) +
-        '<br><br><b>물어볼 것</b><br>' + esc(row.ask_ko) + '</div>' +
-      '</details>' +
-      '<div class="lawbox">근거 조문 ' + refs + '</div>' +
-    '</div>';
-  }}
-
-  function lawBoxes(rows, scope) {{
-    if (!rows || !rows.length) return "";
-    return '<div class="section"><h3>근거 조문 <span class="count">법제처 OPEN API 실조회</span></h3>' +
-      (scope ? '<p class="hint">' + esc(scope) + '</p>' : '') +
-      rows.map(function (row) {{
-        return '<div class="lawbox"><b>' + esc(row.label_ko || row.key) + '</b>' +
-          '<br>' + esc(row.excerpt_ko) +
-          '<span class="src">' + esc(row.effective_on || "") + ' 시행 · ' + esc(row.source_url || "") + '</span></div>';
-      }}).join("") + '</div>';
-  }}
-
-  function moneyBlock(money) {{
-    if (!money || !money.components || !money.components.length) return "";
-    var rows = money.components.map(function (row) {{
-      return '<tr><td>' + esc(row.label_ko) + '</td><td class="num">' + esc(row.amount_ko) + '</td>' +
-        '<td class="num">' + (row.share_pct === null || row.share_pct === undefined ? "" : row.share_pct + "%") + '</td></tr>';
-    }}).join("");
-    return '<div class="section"><h3>비용 구조 <span class="count">' + esc(money.total_ko || "") + '</span></h3>' +
-      '<table class="money-table"><thead><tr><th>항목</th><th class="num">금액</th><th class="num">비중</th></tr></thead>' +
-      '<tbody>' + rows + '</tbody></table>' +
-      '<p class="hint">' + esc(money.note_ko) + '</p></div>';
-  }}
-
-  function render(result) {{
-    lastResult = result;
-    var verdict = result.verdict || {{}};
-    var counts = result.counts || {{}};
-    var coverage = result.coverage || {{}};
-    var html = '<div class="verdict"><div><h3>' + esc(verdict.label_ko || "") + '</h3>' +
-      '<p class="kv">위험 점수 ' + esc(result.risk_score) + ' · 신호 ' + esc(counts.triggered || 0) +
-      '건(높음 ' + esc(counts.high || 0) + ' · 주의 ' + esc(counts.medium || 0) + ') · ' +
-      '확인한 축 ' + esc(coverage.answered_axes || 0) + '/' + esc(coverage.total_axes || 8) + '</p></div>' +
-      badge(verdict.code, verdict.label_ko) + '</div>' +
-      '<div class="meter" aria-hidden="true"><span style="width:' + Math.max(3, Math.min(100, Number(result.risk_score) || 0)) + '%"></span></div>' +
-      '<p class="summary">' + esc(result.summary_ko) + '</p>';
-
-    if ((result.risk_points || []).length) {{
-      html += '<div class="section"><h3>확인할 위험 신호 <span class="count">' + result.risk_points.length + '건</span></h3>' +
-        result.risk_points.map(riskItem).join("") + '</div>';
-    }}
-    if ((result.unknown_points || []).length) {{
-      var shown = result.unknown_points.slice(0, 8);
-      var restNote = result.unknown_points.length > shown.length ?
-        '<p class="hint">그 밖에 ' + (result.unknown_points.length - shown.length) + '개 항목이 더 있습니다. 위 질문에 답하면 함께 줄어듭니다.</p>' : '';
-      html += '<div class="section"><h3>아직 모르는 항목 <span class="count">' + result.unknown_points.length + '건</span></h3>' +
-        '<ul class="clean">' + shown.map(function (row) {{
-          return '<li><b>' + esc(row.title_ko) + '</b> — ' + esc(row.ask_ko) + '</li>';
-        }}).join("") + '</ul>' + restNote + '</div>';
-    }}
-    if ((result.questions_ko || []).length) {{
-      html += '<div class="section"><h3>본부에 물어볼 것</h3><ul class="clean">' +
-        result.questions_ko.map(function (q) {{ return '<li>' + esc(q) + '</li>'; }}).join("") + '</ul></div>';
-    }}
-    if ((result.checklist_ko || []).length) {{
-      html += '<div class="section"><h3>계약 전 체크리스트</h3><ul class="clean">' +
-        result.checklist_ko.map(function (item) {{ return '<li>' + esc(item) + '</li>'; }}).join("") + '</ul></div>';
-    }}
-    html += moneyBlock(result.money);
-    html += lawBoxes(result.law_basis, result.law_basis_scope_ko);
-    if ((result.next_steps || []).length) {{
-      html += '<div class="section"><h3>다음 단계</h3><ol class="steps">' +
-        result.next_steps.map(function (step) {{
-          var link = step.url ? ' <a href="' + esc(step.url) + '" target="_blank" rel="noopener noreferrer">열기</a>' : "";
-          return '<li><b>' + esc(step.title_ko) + '</b> — ' + esc(step.detail_ko) + link + '</li>';
-        }}).join("") + '</ol></div>';
-    }}
-    var support = result.startup_support || {{}};
-    if (support.url) {{
-      html += '<div class="linkcard"><p>' + esc(support.note_ko) + '</p>' +
-        '<a class="btn-link" href="' + esc(support.url) + '" target="_blank" rel="noopener noreferrer">' +
-        esc(support.name_ko || "지원금 확인") + '</a></div>';
-    }}
-    html += '<p class="hint">' + esc(result.disclaimer_ko) + '</p>';
-    resultEl.innerHTML = html;
-    resultCard.hidden = false;
-    resultCard.scrollIntoView({{behavior: "smooth", block: "start"}});
-  }}
-
-  function run() {{
-    var payload = collect();
-    statusEl.className = "status";
-    statusEl.textContent = "법령 조문과 대조하는 중…";
-    var button = $("run");
-    button.disabled = true;
-    fetch("/v1/tools/check_franchise_risk", {{
-      method: "POST", headers: {{"Content-Type": "application/json"}},
-      body: JSON.stringify(payload)
-    }}).then(function (response) {{
-      return response.json().then(function (body) {{ return {{ok: response.ok, body: body}}; }});
-    }}).then(function (out) {{
-      if (!out.ok || !out.body || out.body.ok === false) {{
-        throw new Error((out.body && (out.body.message || out.body.error)) || "판정에 실패했습니다.");
-      }}
-      render(out.body.result);
-      statusEl.textContent = "판정 완료. 확정 판정이 아니므로 서류 원문과 함께 확인하세요.";
-    }}).catch(function (error) {{
-      statusEl.className = "status err";
-      statusEl.textContent = "오류: " + error.message;
-    }}).finally(function () {{
-      button.disabled = false;
-    }});
-  }}
-
-  Array.prototype.forEach.call(document.querySelectorAll("button.preset"), function (button) {{
-    button.addEventListener("click", function () {{
-      var name = button.getAttribute("data-preset");
-      fill(PRESETS[name] || {{}});
-      statusEl.className = "status";
-      statusEl.textContent = "프리셋 적용: " + button.querySelector(".t").textContent;
-      run();
-    }});
-  }});
-
-  form.addEventListener("submit", function (event) {{ event.preventDefault(); run(); }});
-  $("reset").addEventListener("click", function () {{
-    form.reset(); moneySum(); resultCard.hidden = true; statusEl.textContent = "";
-  }});
-  MONEY.forEach(function (name) {{
-    var el = $(name); if (el) el.addEventListener("input", moneySum);
-  }});
-
-  var copyButton = $("copy");
-  function copyStatus(message) {{ $("copy-status").textContent = message; }}
-  function copyText(text, okMessage) {{
-    if (navigator.clipboard && navigator.clipboard.writeText) {{
-      navigator.clipboard.writeText(text).then(function () {{ copyStatus(okMessage); }})
-        .catch(function () {{ fallback(text, okMessage); }});
-    }} else {{ fallback(text, okMessage); }}
-    function fallback(value, message) {{
-      var area = document.createElement("textarea");
-      area.value = value; area.setAttribute("readonly", "readonly");
-      area.style.position = "fixed"; area.style.opacity = "0";
-      document.body.appendChild(area); area.select();
-      try {{ document.execCommand("copy"); copyStatus(message); }}
-      catch (error) {{ copyStatus("복사 실패 — 화면의 내용을 직접 선택해 주세요."); }}
-      document.body.removeChild(area);
-    }}
-  }}
-
-  // 비식별 공유 링크 — 브랜드명만 담고 금액·조건·연락처는 담지 않는다.
-  function shareLink() {{
-    var el = $("brand_name");
-    var brand = String((el && el.value) || "").trim().slice(0, 60);
-    var base = location.origin + "/";
-    return brand ? base + "?brand=" + encodeURIComponent(brand) + "#check" : base + "#check";
-  }}
-
-  copyButton.addEventListener("click", function () {{
-    if (!lastResult) {{ copyStatus("먼저 10초 체크를 실행해 주세요."); return; }}
-    var verdict = lastResult.verdict || {{}};
-    var lines = ["FRNC 리스크 체크 — " + (verdict.label_ko || ""),
-      "위험 점수 " + lastResult.risk_score + " (신호 " + (lastResult.counts || {{}}).triggered + "건)",
-      lastResult.summary_ko || ""];
-    (lastResult.risk_points || []).forEach(function (row) {{
-      lines.push("- [" + row.severity_label_ko + "] " + row.title_ko + " — " + (row.note_ko || ""));
-    }});
-    (lastResult.questions_ko || []).slice(0, 5).forEach(function (q) {{ lines.push("? " + q); }});
-    lines.push("확정 판정 아님 · " + location.origin);
-    copyText(lines.join("\\n"), "복사됨");
-  }});
-
-  $("share").addEventListener("click", function () {{
-    copyText(shareLink(), "공유 링크 복사됨 — 브랜드명만 담깁니다.");
-  }});
-
-  // ?brand=...#check 로 들어오면 브랜드명만 채운다(금액·조건은 손대지 않는다).
-  function prefillFromUrl() {{
-    var brand = "";
-    try {{
-      if (window.URLSearchParams) {{
-        brand = new URLSearchParams(location.search).get("brand") || "";
-      }}
-    }} catch (error) {{ brand = ""; }}
-    brand = String(brand).trim().slice(0, 60);
-    if (!brand) return;
-    var el = $("brand_name");
-    if (!el) return;
-    el.value = brand;
-    statusEl.className = "status";
-    statusEl.textContent = "공유 링크에서 브랜드명만 채웠습니다. 금액·조건을 넣고 10초 체크를 눌러 주세요.";
-  }}
-
-  // 무료 베타·소개 글 유입 태그(0.1.7) — ?cohort=beta_pilot 로 들어온 링크만 문의에 붙인다.
-  // 서버와 같은 규칙(영문 소문자·숫자와 . _ : -, 40자)을 먼저 확인해 잘못된 값이면 보내지 않는다.
-  function cohortTag() {{
-    try {{
-      var value = String(new URLSearchParams(location.search).get("cohort") || "").trim().toLowerCase();
-      return /^[a-z0-9][a-z0-9._:-]{{0,39}}$/.test(value) ? value : "";
-    }} catch (error) {{ return ""; }}
-  }}
-
-  var inquiry = $("inquiry");
-  inquiry.addEventListener("submit", function (event) {{
-    event.preventDefault();
-    var status = $("inq-status");
-    var payload = {{
-      contact: $("inq-contact").value,
-      topic: $("inq-topic").value,
-      message: $("inq-message").value,
-      cohort: cohortTag()
-    }};
-    status.className = "status";
-    status.textContent = "보내는 중…";
-    fetch("/v1/inquiry", {{
-      method: "POST", headers: {{"Content-Type": "application/json"}},
-      body: JSON.stringify(payload)
-    }}).then(function (response) {{
-      return response.json().then(function (body) {{ return {{ok: response.ok, body: body}}; }});
-    }}).then(function (out) {{
-      if (!out.body || !out.body.ok) {{
-        status.className = "status err";
-        status.textContent = (out.body && out.body.message_ko) || "접수하지 못했습니다.";
-        return;
-      }}
-      status.textContent = (out.body.message_ko || "접수됐습니다.") +
-        (out.body.receipt ? " 접수번호 " + out.body.receipt : "");
-      $("inq-message").value = "";
-    }}).catch(function () {{
-      status.className = "status err";
-      status.textContent = "네트워크 오류로 접수하지 못했습니다.";
-    }});
-  }});
-
-  // --- 특약·계약서 문구 스캔 ----------------------------------------------
-  var scanText = $("scan-text");
-  var scanResultEl = $("scan-result");
-  var scanStatusEl = $("scan-status");
-
-  function scanCount() {{
-    var el = $("scan-count");
-    if (!el || !scanText) return;
-    var length = scanText.value.length;
-    var max = Number(scanText.getAttribute("data-max")) || 0;
-    el.textContent = max && length > max ?
-      length.toLocaleString("ko-KR") + "자 — 앞 " + max.toLocaleString("ko-KR") + "자만 스캔합니다" :
-      length.toLocaleString("ko-KR") + "자";
-  }}
-
-  function scanFinding(row) {{
-    var refs = (row.law_refs || []).map(function (key) {{
-      return '<span class="kbd">' + esc(key) + '</span>';
-    }}).join(" ");
-    return '<div class="finding">' +
-      '<div class="finding-head"><h4>' + esc(row.title_ko) + '</h4>' +
-        badge(row.severity, row.severity_label_ko) + '</div>' +
-      '<blockquote class="quote">' + esc(row.matched_text_ko) + '</blockquote>' +
-      '<p class="why">' + esc(row.note_ko || row.category_label_ko) + '</p>' +
-      '<p class="req"><b>본부에 요청할 문구</b><br>' + esc(row.request_edit_ko) + '</p>' +
-      '<details><summary>왜 문제인가 · 물어볼 것</summary>' +
-        '<div class="body"><b>이유</b><br>' + esc(row.why_ko) +
-        '<br><br><b>물어볼 것</b><br>' + esc(row.ask_ko) + '</div>' +
-      '</details>' +
-      '<div class="lawbox">근거 조문 ' + refs + '</div>' +
-    '</div>';
-  }}
-
-  function scanRender(data) {{
-    var counts = data.counts || {{}};
-    var verdict = data.verdict || {{}};
-    var html = '<div class="verdict"><div><h3>' + esc(verdict.label_ko || "") + '</h3>' +
-      '<p class="kv">확인 필요 문구 ' + esc(counts.flagged || 0) + '건(높음 ' +
-      esc(counts.high || 0) + ' · 주의 ' + esc(counts.medium || 0) + ') · 대조한 유형 ' +
-      esc(counts.rules_checked || 0) + '개</p></div>' +
-      badge(verdict.code, verdict.label_ko) + '</div>' +
-      '<p class="summary">' + esc(data.summary_ko) + '</p>' +
-      '<p class="notice" style="margin-top:12px">' + esc(data.not_a_clearance_ko) + '</p>';
-    var findings = data.findings || [];
-    if (findings.length) {{
-      html += '<div class="section"><h3>확인이 필요한 문구 <span class="count">' +
-        findings.length + '건</span></h3>' + findings.map(scanFinding).join("") + '</div>';
-    }}
-    var checks = data.checks_ko || [];
-    if (checks.length) {{
-      html += '<div class="section"><h3>대조한 유형 <span class="count">' + checks.length +
-        '개</span></h3><ul class="scan-checks">' + checks.map(function (row) {{
-          return '<li><b>' + esc(row.title_ko) + '</b> — ' + esc(row.result_ko) + '</li>';
-        }}).join("") + '</ul></div>';
-    }}
-    html += lawBoxes(data.law_basis, data.law_basis_scope_ko);
-    if ((data.questions_ko || []).length) {{
-      html += '<div class="section"><h3>계약 전에 확인할 것</h3><ul class="clean">' +
-        data.questions_ko.map(function (q) {{ return '<li>' + esc(q) + '</li>'; }}).join("") +
-        '</ul></div>';
-    }}
-    html += '<p class="hint">' + esc(data.disclaimer_ko) + '</p>';
-    scanResultEl.innerHTML = html;
-    scanResultEl.hidden = false;
-  }}
-
-  function scanRun() {{
-    if (!scanText) return;
-    var text = String(scanText.value || "").trim();
-    if (!text) {{
-      scanStatusEl.className = "status err";
-      scanStatusEl.textContent = "계약서·특약 문구를 붙여 넣어 주세요.";
-      return;
-    }}
-    var button = $("scan-run");
-    scanStatusEl.className = "status";
-    scanStatusEl.textContent = "문구를 조문 유형과 대조하는 중…";
-    button.disabled = true;
-    fetch("/v1/tools/scan_contract_text", {{
-      method: "POST", headers: {{"Content-Type": "application/json"}},
-      body: JSON.stringify({{text: text}})
-    }}).then(function (response) {{
-      return response.json().then(function (body) {{ return {{ok: response.ok, body: body}}; }});
-    }}).then(function (out) {{
-      if (!out.ok || !out.body || out.body.ok === false) {{
-        throw new Error((out.body && (out.body.message || out.body.error)) || "스캔에 실패했습니다.");
-      }}
-      scanRender(out.body.result);
-      scanStatusEl.textContent = "스캔 완료. 잡히는 문구가 없어도 원문 전체 검토는 따로 필요합니다.";
-    }}).catch(function (error) {{
-      scanStatusEl.className = "status err";
-      scanStatusEl.textContent = "오류: " + error.message;
-    }}).finally(function () {{
-      button.disabled = false;
-    }});
-  }}
-
-  Array.prototype.forEach.call(document.querySelectorAll("button.sample"), function (button) {{
-    button.addEventListener("click", function () {{
-      var name = button.getAttribute("data-sample");
-      var sample = SCAN_SAMPLES_TEXT[name];
-      if (!sample || !scanText) return;
-      scanText.value = sample;
-      scanCount();
-      scanRun();
-    }});
-  }});
-
-  if (scanText) scanText.addEventListener("input", scanCount);
-  $("scan-run").addEventListener("click", scanRun);
-  $("scan-clear").addEventListener("click", function () {{
-    scanText.value = "";
-    scanCount();
-    scanResultEl.hidden = true;
-    scanStatusEl.textContent = "";
-  }});
-  scanCount();
-
-  // --- 브랜드 정보공개서 조회 --------------------------------------------
-  var brandForm = $("brand-search");
-  var brandInput = $("brand-q");
-  var brandStatusEl = $("brand-status");
-  var brandResultEl = $("brand-result");
-
-  function fmtDate(value) {{
-    var text = String(value === null || value === undefined ? "" : value);
-    return text.length === 8 ? text.slice(0, 4) + "-" + text.slice(4, 6) + "-" + text.slice(6) : text;
-  }}
-
-  function brandHit(brand) {{
-    var bits = [];
-    if (brand.hq_name) bits.push("본부 " + esc(brand.hq_name));
-    var industry = [brand.industry_large, brand.industry_mid].filter(Boolean).join(" · ");
-    if (industry) bits.push(esc(industry));
-    if (brand.main_product) bits.push("주요상품 " + esc(brand.main_product));
-    var facts = [];
-    if (brand.started_on) facts.push("가맹사업 개시 " + esc(fmtDate(brand.started_on)));
-    if (brand.stores_year_end !== null && brand.stores_year_end !== undefined) {{
-      facts.push("가맹점 " + Number(brand.stores_year_end).toLocaleString("ko-KR") + "개");
-    }}
-    if (brand.direct_stores !== null && brand.direct_stores !== undefined) {{
-      facts.push("직영 " + Number(brand.direct_stores).toLocaleString("ko-KR") + "개");
-    }}
-    if (brand.closure_rate_pct !== null && brand.closure_rate_pct !== undefined) {{
-      facts.push((brand.closure_rate_year ? brand.closure_rate_year + "년 " : "") +
-        "폐점률 " + brand.closure_rate_pct + "%");
-    }}
-    if (brand.base_year) facts.push(brand.base_year + "년 기준");
-    return '<div class="risk"><div class="risk-head"><h4>' + esc(brand.brand_name) + '</h4>' +
-      '<span class="kbd">' + esc(brand.brand_code || "") + '</span></div>' +
-      '<p class="why">' + bits.join(" · ") + '</p>' +
-      '<p class="hint">' + facts.join(" · ") + '</p></div>';
-  }}
-
-  function brandRender(data) {{
-    var brands = data.brands || [];
-    var html = '<p class="summary">' + esc(data.message_ko || "") + '</p>';
-    if (brands.length) {{
-      html += '<div class="section"><h3>조회 결과 <span class="count">' + brands.length +
-        '건</span></h3>' + brands.map(brandHit).join("") + '</div>';
-    }}
-    if (data.zero_result && data.zero_result_notice_ko) {{
-      html += '<p class="notice">' + esc(data.zero_result_notice_ko) + '</p>';
-    }}
-    var status = data.field_status || {{}};
-    var missing = (status.null || []).map(function (item) {{
-      return esc(item.label_ko || item.field);
-    }});
-    if (missing.length) {{
-      html += '<p class="hint">값이 빈 항목: ' + missing.join(" · ") + ' — ' +
-        esc(status.meaning_ko || "") + '</p>';
-    }}
-    var source = data.data_source === "index" ? "로컬 브랜드 색인(공정위 승인 데이터 전체 페이지)" :
-      (data.data_source === "api" ? "공정위 가맹정보 API 실시간 응답" : "내장 샘플(가상 데이터)");
-    html += '<p class="hint">데이터 근거: ' + esc(source) + ' · 상태 ' + esc(data.status) + '</p>';
-    html += '<p class="hint"><a href="' + esc(data.disclosure_portal || "https://franchise.ftc.go.kr") +
-      '" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템에서 정보공개서 원문 확인</a></p>';
-    brandResultEl.innerHTML = html;
-    brandResultEl.hidden = false;
-  }}
-
-  function brandLookup() {{
-    if (!brandInput) return;
-    var query = String(brandInput.value || "").trim().slice(0, 60);
-    if (!query) {{
-      brandStatusEl.className = "status err";
-      brandStatusEl.textContent = "브랜드명이나 브랜드관리번호를 넣어 주세요.";
-      return;
-    }}
-    var payload = /^brd_/i.test(query) ? {{brand_code: query}} : {{brand_name: query}};
-    var button = $("brand-run");
-    brandStatusEl.className = "status";
-    brandStatusEl.textContent = "공정위 가맹정보에서 찾는 중…";
-    button.disabled = true;
-    fetch("/v1/tools/lookup_brand_disclosure", {{
-      method: "POST", headers: {{"Content-Type": "application/json"}},
-      body: JSON.stringify(payload)
-    }}).then(function (response) {{
-      return response.json().then(function (body) {{ return {{ok: response.ok, body: body}}; }});
-    }}).then(function (out) {{
-      if (!out.ok || !out.body || out.body.ok === false) {{
-        throw new Error((out.body && (out.body.message || out.body.error)) || "조회에 실패했습니다.");
-      }}
-      brandRender(out.body.result);
-      brandStatusEl.textContent = "조회 완료. 확정 정보가 아니므로 정보공개서 원문과 대조하세요.";
-    }}).catch(function (error) {{
-      brandStatusEl.className = "status err";
-      brandStatusEl.textContent = "오류: " + error.message;
-    }}).finally(function () {{
-      button.disabled = false;
-    }});
-  }}
-
-  if (brandForm) {{
-    brandForm.addEventListener("submit", function (event) {{ event.preventDefault(); brandLookup(); }});
-  }}
-
-  moneySum();
-  prefillFromUrl();
-}})();
-</script>
+<script>{script}</script>
 </body>
 </html>
 """
@@ -1260,7 +1577,6 @@ def render_not_found(path: str = "/", meta: Optional[Dict[str, Any]] = None) -> 
       <div>
         <h1>{SERVICE_NAME} · {SERVICE_TITLE_KO}</h1>
         <p>{SERVICE_TAGLINE}</p>
-        <p class="en">{SERVICE_SUBTITLE_EN}</p>
       </div>
     </div>
     <div><span class="pill">v{__version__}</span><span class="pill ghost">404</span></div>
@@ -1271,7 +1587,7 @@ def render_not_found(path: str = "/", meta: Optional[Dict[str, Any]] = None) -> 
     <p class="sub">주소 <span class="kbd">{safe_path}</span> 는 이 서비스에 없습니다.
       아래에서 원하는 화면으로 이동하세요. 기계용 경로(<span class="kbd">/v1/…</span>)는 JSON 으로 응답합니다.</p>
     <ul class="clean">
-      <li><a href="/">내 조건으로 10초 체크</a> — 브랜드·금액·조건으로 위험 신호 확인</li>
+      <li><a href="/">브랜드로 리스크 확인</a> — 브랜드명·업종 입력 한 번으로 위험 신호 확인</li>
       <li><a href="/#brand-card">브랜드 정보공개서 조회</a> — 브랜드명(부분 일치)·브랜드관리번호로 조회</li>
       <li><a href="/guides/">질문형 가이드 {len(guides.GUIDES)}종</a> — 숙고기간·가맹금·영업지역·해지·갱신</li>
       <li><a href="/v1/meta">서비스·데이터 상태</a> · <a href="/llms.txt">llms.txt</a> · <a href="/healthz">healthz</a></li>
@@ -1280,7 +1596,7 @@ def render_not_found(path: str = "/", meta: Optional[Dict[str, Any]] = None) -> 
 
   <p class="foot">
     {SERVICE_NAME}는 입력한 조건과 공개 법령 조문을 대조하는 참고용 사전 점검 도구입니다.
-    위법 여부·계약 효력을 확정하지 않습니다. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
+    확정 판정 아님 — 위법 여부·계약 효력을 확정하지 않습니다. · 정보공개서 원문: <a href="{DISCLOSURE_PORTAL}" target="_blank" rel="noopener noreferrer">가맹사업정보제공시스템</a>
     <br>같이 쓰는 도구 — 수입·유통 규제 체크 <a href="{CLNS_URL}" target="_blank" rel="noopener noreferrer">CLNS</a>
     · 창업·개인 지원금 찾기 <a href="{GRANT_URL}" target="_blank" rel="noopener noreferrer">GRNT</a>
     <br>고지 — <a href="/privacy">개인정보 처리방침</a> · <a href="/terms">이용약관</a>

@@ -1,4 +1,8 @@
-"""웹 UI 테스트 — 다크 모드 토큰·프리셋 4개·복사·문의 폼·외부 의존 0."""
+"""웹 UI 테스트 — 다크 모드 토큰·프리셋 4개·복사·문의 폼·외부 의존 0.
+
+0.1.12 부터는 첫 화면 단순화(입력 1개 + 버튼 1개 + 예시 3개, 나머지는 접힘)를
+`SimpleLayoutTest` 가 함께 지킨다.
+"""
 from __future__ import annotations
 
 import os
@@ -198,6 +202,105 @@ class WebUiTest(unittest.TestCase):
         self.assertIn('property="og:title"', self.html)
         self.assertIn('name="theme-color"', self.html)
         self.assertIn('media="(prefers-color-scheme: dark)"', self.html)
+
+
+class SimpleLayoutTest(unittest.TestCase):
+    """0.1.12 — 첫 화면은 한 가지 일만, 나머지는 접어 두고 결과는 신호등부터."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = web_ui.render_page({"data_state": "sample"})
+
+    def hero_before_details(self) -> str:
+        block = self.html[self.html.index('id="brand-card"'):]
+        return block[:block.index('<details class="more"')]
+
+    def detail_block(self) -> str:
+        block = self.html[self.html.index('id="more"'):]
+        return block[:block.index("</details>")]
+
+    def test_first_screen_is_one_input_and_one_button(self):
+        top = self.hero_before_details()
+        top = top[:top.index('<div class="chips">')]
+        self.assertEqual(len(re.findall(r"<input\b", top)), 1)
+        self.assertEqual(len(re.findall(r"<button\b", top)), 1)
+        self.assertEqual(len(re.findall(r"<select\b", top)), 0)
+        self.assertIn('id="run"', top)
+        self.assertIn("리스크 확인하기", top)
+        self.assertIn("브랜드명", self.html)
+
+    def test_advanced_conditions_are_collapsed_by_default(self):
+        self.assertIn('<details class="more" id="more">', self.html)
+        self.assertNotIn('<details class="more" id="more" open', self.html)
+        self.assertIn("상세 조건 입력", self.html)
+        # 프리셋 4개와 판정 입력은 접힌 안쪽에만 있다.
+        detail = self.detail_block()
+        for field in ("franchise_fee_krw", "interior_krw", "disclosure_days_before",
+                      "payment_route", "interior_designated", "territory",
+                      "legal_violation", "closure_rate_3y_pct", "penalty_ratio_pct"):
+            self.assertIn(f'id="{field}"', detail, field)
+        for preset in web_ui.PRESETS:
+            self.assertIn(f'data-preset="{preset["id"]}"', detail, preset["id"])
+
+    def test_hero_speaks_plain_korean(self):
+        top = self.hero_before_details()
+        for word in ("정보공개서", "FDD", "MCP", "API", "JSON", "브랜드관리번호",
+                     "REST", "스키마"):
+            self.assertNotIn(word, top, word)
+
+    def test_three_example_chips(self):
+        hero = self.hero_before_details()
+        chips = re.findall(r'class="chip" data-query="([^"]+)"', hero)
+        self.assertEqual(len(chips), 3)
+        self.assertEqual(chips, web_ui.QUICK_BRANDS)
+
+    def test_quiet_sections_sit_after_the_result(self):
+        order = [self.html.index('id="result-card"'), self.html.index('id="scan-card"'),
+                 self.html.index('id="siblings"'), self.html.index('id="inquiry"'),
+                 self.html.index('<p class="foot">')]
+        self.assertEqual(order, sorted(order))
+
+    def test_data_state_note_moved_below_the_tools(self):
+        self.assertIn('id="data-state-note"', self.html)
+        self.assertGreater(self.html.index('id="data-state-note"'),
+                           self.html.index('id="scan-card"'))
+
+    def test_result_is_a_signal_card_then_four_metrics(self):
+        for marker in ('class="signal ', "종합 판정", 'class="metrics"',
+                       "먼저 확인할 것", "본부에 물어볼 질문", "자세히 보기",
+                       "data-qi", "data-oi"):
+            self.assertIn(marker, self.html, marker)
+        # 결과 렌더 순서: 신호 카드 → 브랜드 정보 → 지표 → 신호 목록 → 질문 → 자세히 보기
+        render = self.html[self.html.index("function render(result, brand)"):]
+        render = render[:render.index("function run()")]
+        positions = [render.index(token) for token in
+                     ("var html = signalBlock(", "html += factsBlock(brand",
+                      "html += metricsBlock(",
+                      "class=\"result-head\">먼저 확인할 것", "html += quick;",
+                      "class=\"result-head\">본부에 물어볼 질문",
+                      "html += detailsBlock(")]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_quick_answers_are_valid_engine_inputs(self):
+        self.assertGreaterEqual(len(web_ui.QUICK_ANSWERS), 3)
+        for item in web_ui.QUICK_ANSWERS:
+            self.assertIn(item["field"], engine.FIELD_ALIASES, item["field"])
+            for opt in item["opts"]:
+                for field, value in opt["set"].items():
+                    self.assertIn(field, engine.FIELD_ALIASES, field)
+                    if field in engine.ENUM_FIELDS:
+                        self.assertIn(str(value), engine.ENUM_FIELDS[field], field)
+        answered = {}
+        for item in web_ui.QUICK_ANSWERS:
+            answered.update(item["opts"][0]["set"])
+        result = engine.check_franchise_risk(dict(answered, brand_name="샘플치킨"))
+        self.assertGreaterEqual(result["coverage"]["answered_axes"], 5)
+
+    def test_quick_answer_buttons_map_to_real_form_fields(self):
+        detail = self.detail_block()
+        for item in web_ui.QUICK_ANSWERS:
+            for field in item["opts"][0]["set"]:
+                self.assertIn(f'id="{field}"', detail, field)
 
 
 if __name__ == "__main__":
